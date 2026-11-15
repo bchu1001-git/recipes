@@ -1,22 +1,33 @@
 // The list of recipes: search, the Go-to and folder filters, and the + button.
 // On a wide window the same filters also appear as a sidebar.
+// Recipes that arrived from outside wait under "To review" until they are kept or discarded.
 
-import { h, icon, sheet } from './dom.js';
+import { h, icon, sheet, go } from './dom.js';
 import { state, library, subscribe, saveRecipe } from '../store.js';
 import { status, onStatus, syncNow, ago } from '../sync/auto.js';
 import { ui, onUi, setUi, toggleFilter, clearFilters } from './state.js';
-import { matchesQuery, matchesFilters, sortRecipes, initials, hueFor, formatMinutes } from '../model.js';
+import { matchesQuery, matchesFilters, sortRecipes, initials, hueFor, formatMinutes, keptRecipes, waitingRecipes } from '../model.js';
 import { EXAMPLES } from '../sample.js';
 
+const kept = () => keptRecipes(state.recipes.values());
+const waiting = () => waitingRecipes(state.recipes.values());
+
 function visibleRecipes() {
-  const all = sortRecipes(state.recipes.values());
-  return all.filter((r) => (!ui.gotoOnly || r.goto) && matchesFilters(r, ui.filters) && matchesQuery(r, ui.query));
+  return sortRecipes(kept()).filter((r) => (!ui.gotoOnly || r.goto) && matchesFilters(r, ui.filters) && matchesQuery(r, ui.query));
 }
 
 function countIn(folderId) {
   let n = 0;
-  for (const r of state.recipes.values()) if (r.folders.includes(folderId)) n++;
+  for (const r of state.recipes.values()) if (!r.review && r.folders.includes(folderId)) n++;
   return n;
+}
+
+/** Shows the recipes waiting for review. With only one waiting, it opens that one straight away. */
+export function openReview() {
+  const list = waiting();
+  if (!list.length) return;
+  setUi({ reviewing: true, filters: new Set(), gotoOnly: false });
+  if (list.length === 1) go('r/' + list[0].id);
 }
 
 export function stars(rating, cls) {
@@ -34,7 +45,7 @@ function row(recipe) {
   return h('a', { class: 'row' + (ui.openId === recipe.id ? ' is-open' : ''), href: '#/r/' + recipe.id },
     tile(recipe),
     h('span', { class: 'row-main' },
-      h('span', { class: 'row-title', text: recipe.title }),
+      h('span', { class: 'row-title', text: recipe.title || 'Untitled' }),
       sub ? h('span', { class: 'row-sub', text: sub }) : null,
       recipe.rating ? stars(recipe.rating) : null),
     recipe.goto ? h('span', { class: 'row-heart', role: 'img', 'aria-label': 'Go-to' }, icon('heart')) : null);
@@ -96,6 +107,8 @@ function pullToSync(scroller, hint) {
 export function renderHome(root) {
   const search = h('input', { class: 'search', type: 'search', 'aria-label': 'Search recipes', autocomplete: 'off',
     oninput: (e) => setUi({ query: e.target.value }) });
+  const searchWrap = h('div', { class: 'search-wrap' }, icon('search'), search);
+  const review = h('div', { class: 'review-slot' });
   const chips = h('div', { class: 'chips scroll-x' });
   const rows = h('div', { class: 'rows' });
   const sync = h('button', { class: 'sync-chip', type: 'button', onclick: () => {
@@ -118,18 +131,33 @@ export function renderHome(root) {
         h('h1', { class: 'bar-title', text: 'Recipes' }),
         sync,
         h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': 'Settings' }, icon('sliders'))),
-      h('div', { class: 'search-wrap' }, icon('search'), search),
+      review,
+      searchWrap,
       chips,
       rows);
   root.replaceChildren(scroller, h('a', { class: 'fab', href: '#/new', 'aria-label': 'Add a recipe' }, icon('plus')));
   pullToSync(scroller, hint);
 
   const draw = () => {
-    const total = state.recipes.size;
+    const total = kept().length;
+    const toCheck = waiting();
+    const reviewing = ui.reviewing && toCheck.length > 0;
     const list = visibleRecipes();
     const filtering = ui.filters.size > 0 || ui.gotoOnly || ui.query.trim() !== '';
     search.placeholder = total ? 'Search ' + total + (total === 1 ? ' recipe' : ' recipes') : 'Search';
     if (search.value !== ui.query) search.value = ui.query;
+
+    // Something is waiting: one clear way in. While looking at them: one clear way back.
+    review.replaceChildren(...(!toCheck.length ? [] : reviewing
+      ? [h('div', { class: 'review-head' },
+          h('button', { class: 'back', type: 'button', onclick: () => setUi({ reviewing: false }) }, icon('back'), 'All recipes'),
+          h('span', { class: 'review-head-title', text: 'To review' }))]
+      : [h('button', { class: 'review-entry', type: 'button', onclick: openReview },
+          h('span', { class: 'review-entry-label', text: 'To review' }),
+          h('span', { class: 'review-entry-count', text: String(toCheck.length) }),
+          icon('chevron'))]));
+    searchWrap.hidden = reviewing;
+    chips.hidden = reviewing;
 
     chips.replaceChildren(
       chip('Go-to', ui.gotoOnly, () => setUi({ gotoOnly: !ui.gotoOnly }), icon('heart')),
@@ -141,7 +169,11 @@ export function renderHome(root) {
         return c;
       }));
 
-    if (!total) {
+    if (reviewing) {
+      rows.replaceChildren(
+        h('p', { class: 'rows-note', text: 'Check each one, then keep it or discard it.' }),
+        ...toCheck.map(row));
+    } else if (!total) {
       rows.replaceChildren(h('div', { class: 'empty' },
         h('h2', { text: 'No recipes yet' }),
         h('p', { text: 'Type in one you know by heart, or add three examples to look around.' }),
@@ -171,16 +203,19 @@ export function renderSide(root) {
   const draw = () => {
     const item = (label, count, on, onclick, lead) => h('button', { class: 'side-item' + (on ? ' is-on' : ''), type: 'button', 'aria-pressed': String(on), onclick },
       lead || null, h('span', { class: 'side-label', text: label }), h('span', { class: 'side-count', text: String(count) }));
-    const all = state.recipes.size;
-    const gotos = [...state.recipes.values()].filter((r) => r.goto).length;
-    const nothing = !ui.gotoOnly && ui.filters.size === 0;
+    const all = kept();
+    const toCheck = waiting();
+    const reviewing = ui.reviewing && toCheck.length > 0;
+    const gotos = all.filter((r) => r.goto).length;
+    const nothing = !reviewing && !ui.gotoOnly && ui.filters.size === 0;
     root.replaceChildren(
       h('div', { class: 'side-scroll' },
-        item('All recipes', all, nothing, () => setUi({ filters: new Set(), gotoOnly: false })),
-        item('Go-to', gotos, ui.gotoOnly, () => setUi({ gotoOnly: !ui.gotoOnly }), icon('heart')),
+        toCheck.length ? item('To review', toCheck.length, reviewing, () => (reviewing ? setUi({ reviewing: false }) : openReview())) : null,
+        item('All recipes', all.length, nothing, () => setUi({ filters: new Set(), gotoOnly: false, reviewing: false })),
+        item('Go-to', gotos, ui.gotoOnly && !reviewing, () => setUi({ gotoOnly: !ui.gotoOnly, reviewing: false }), icon('heart')),
         ...state.folders.groups.filter((g) => g.folders.length).map((g) => h('div', { class: 'side-group' },
           h('h2', { class: 'label', text: g.name }),
-          g.folders.map((f) => item(f.name, countIn(f.id), ui.filters.has(f.id), () => toggleFilter(f.id)))))),
+          g.folders.map((f) => item(f.name, countIn(f.id), ui.filters.has(f.id) && !reviewing, () => toggleFilter(f.id)))))),
       h('a', { class: 'side-item side-foot', href: '#/settings' }, icon('sliders'), h('span', { class: 'side-label', text: 'Settings' })));
   };
   subscribe(draw);

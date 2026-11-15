@@ -29,7 +29,8 @@ Then, on that page:
    fill this part in.
 3. Under **Permissions**, check that **Contents** and **Workflows** both say **Read and write**.
    Contents is what publishing needs. Workflows is for the importer that comes later.
-4. Click **Generate token** and copy it into your password manager. GitHub shows it only once.
+4. Click **Generate token** and copy it somewhere safe that is not in this folder (a password manager,
+   if you use one). GitHub shows it only once.
 
 The long way, if the link does not work: your picture at the top right, **Settings**, then
 **Developer settings** at the bottom of the left column, **Personal access tokens**,
@@ -58,8 +59,30 @@ The second command asks for a password. Paste the key from step 2. It is used on
 
 ### 5. Add it to the iPhone and the Mac
 
-- **iPhone:** open the address in Safari, tap Share, then **Add to Home Screen**.
-- **Mac:** open the address in Safari, then File, **Add to Dock**.
+**iPhone.** These are the steps on iOS 26 and iOS 27. Every phone that will use the app needs them once.
+
+1. Open **Safari** itself (the compass icon) and go to `YOUR-USERNAME.github.io/recipes`. A link
+   opened inside another app will not do. Wait until the page titled Recipes shows.
+2. Tap the **three dots** beside the address bar, then **Share**. If the bar has a Share button of its
+   own (a square with an arrow pointing up), tap that instead.
+3. Scroll down the list that slides up and tap **Add to Home Screen**. If it is missing, scroll to the
+   bottom, tap **Edit Actions**, and add it from there.
+4. Leave **Open as Web App** switched on and the name as Recipes, then tap **Add**.
+5. Open Recipes from its new icon. It fills the screen, with no address bar.
+
+Worth knowing:
+
+- **Open it from the icon every time.** On an iPhone the icon keeps its own recipes, apart from the
+  same address opened in a Safari tab.
+- **Until a library is connected (Part 3) the recipes are only on that phone**, and removing the icon
+  removes them. Settings, **Save a backup** makes a copy to keep.
+- **It works without a connection** once it has been opened with one.
+- **New versions arrive on their own.** After a publish, open the app with a connection and tap
+  **Reload** on the note "A new version is ready". If no note appears, close the app completely and
+  open it again. The version is the last line of Settings.
+- **If Safari's bars show around the app,** Open as Web App was off: remove the icon and add it again.
+
+**Mac.** Open the address in Safari, then File, **Add to Dock**.
 
 ### 6. Try the Clock timer test
 
@@ -90,23 +113,34 @@ Someone with a library of their own can skip step 1 and create the repository in
 
 ### 1. Create the organization
 
-1. On github.com, click your picture, then **Your organizations**, then **New organization**.
+1. On github.com, click your picture, then **Organizations** (it is also under Settings), then
+   **New organization**.
 2. Choose the **Free** plan.
 3. Give it a name nobody else has, enter a contact email, and say it belongs to your personal account.
+   Anyone can look the name up, though not what is inside, so pick one you do not mind being seen.
 4. Skip inviting people for now.
 
 ### 2. Let keys work without approval or an expiry date
 
+Do this before making a key: the organization turns away a key that breaks these rules.
+
 1. Open the organization, then **Settings**.
-2. In the left column, under **Personal access tokens**, open **Settings**.
-3. Allow fine-grained tokens, and choose **Do not require administrator approval**.
-4. If a maximum lifetime is set for fine-grained tokens, remove the limit, so that keys can be made
-   with no expiration.
+2. In the left column, under **Personal access tokens**, open **Settings**, then the
+   **Fine-grained tokens** tab.
+3. Three sections follow, each with its own **Save** button. Click the one under whatever you change.
+   - **Fine-grained personal access tokens:** choose **Allow access via fine-grained personal access
+     tokens**.
+   - **Require approval of fine-grained personal access tokens:** choose **Do not require
+     administrator approval**.
+   - **Set maximum lifetimes for personal access tokens:** leave **Fine-grained personal access tokens
+     must expire** unticked, so that keys can be made with no expiration.
+4. Reload the page to see that the choices stayed.
 
 ### 3. Create the library
 
 1. In the organization, **New repository**.
-2. Name: `library`. Visibility: **Private**. Everything else can stay as it is.
+2. Name: `library`, or any name you like. The app uses whatever name you give it when you connect.
+   Visibility: **Private**. Everything else can stay as it is.
 3. Click **Create repository**. The app fills it in the first time a device connects.
 
 ### 4. Make a key for each device
@@ -124,19 +158,30 @@ One key can serve all of one person's devices. A key per device lets you cancel 
 
 ### 5. Connect the app
 
-In Recipes: **Settings**, **Connect a library**. Enter `YOUR-ORGANIZATION/library`, paste the key, name
-the device, and tap **Connect**. Do the same on each device. The first one to connect sends its recipes
+In Recipes: **Settings**, **Connect a library**. Enter `YOUR-ORGANIZATION/library` (with your own
+repository name if you chose another), paste the key, name the device, and tap **Connect**. Do the same on each device. The first one to connect sends its recipes
 up; the others receive them.
 
 ### 6. Add the second person
 
-In the organization, **People**, then **Invite member**. Once they accept, they make their own key
-with the link in step 4 and connect the app the same way.
+Only the people you invite can see the library. Nobody else can, and a second household's library is
+a separate repository in their own account.
 
-## Part 4: later steps
+1. In the organization, **People**, then **Invite member**.
+2. Let members change recipes: organization **Settings**, **Member privileges**, and under
+   **Base permissions** choose **Write**, then confirm. Without this a member can read the library
+   but the app cannot save their changes.
+3. Once they accept, they make their own key with the link in step 4 and connect the app the same way.
+
+## Part 4: saving from Safari, and later steps
+
+**The "Save to Recipes" Shortcut.** Its steps are inside the app, with your library's own address
+filled in: open Recipes, then **Settings**, **Save from Safari**, **Set up Save to Recipes**. The
+Shortcut is made by hand on each iPhone and gets a key of its own. It is a first try that still has to
+be proven on a phone.
 
 These will be written out in full when the parts they belong to are built:
 
 - Add the AI key to the library as a secret.
-- Install the "Save to Recipes" and "Recipe Timer" Shortcuts.
+- Install the "Recipe Timer" Shortcut.
 - Set up a second, separate library for another household.

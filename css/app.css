@@ -41,6 +41,8 @@ input, textarea { font: inherit; color: inherit; }
 .icon { width: 1.5em; height: 1.5em; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 .icon-fill { fill: currentColor; stroke: none; }
 .label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink3); }
+[hidden] { display: none !important; }
+.offscreen { position: fixed; left: -200vw; top: 0; opacity: 0; }
 
 /* ---------- the three panes: one at a time on a phone, side by side on a wide window ---------- */
 .app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -57,7 +59,7 @@ input, textarea { font: inherit; color: inherit; }
   .side { display: flex; flex-direction: column; height: 100%; background: var(--bg2); border-right: 1px solid var(--line); overflow: hidden; }
   .app[data-view] .list, .app[data-view] .detail { display: flex; }
   .list { border-right: 1px solid var(--line); }
-  .list .chips.scroll-x, .list .bar .icon-btn { display: none; }
+  .list .chips.scroll-x, .list .bar .icon-btn, .list .review-entry { display: none; }
   .back-list { visibility: hidden; }
   .row.is-open { background: var(--bg2); margin: 0 calc(-1 * var(--gutter)); padding-inline: var(--gutter); }
 }
@@ -222,6 +224,43 @@ textarea.input { resize: vertical; line-height: 1.4; min-height: 5rem; }
 .connect { display: flex; flex-direction: column; gap: 14px; }
 .connect .field-error { margin-top: 0; }
 .btn:disabled { opacity: .5; cursor: default; }
+
+/* ---------- to review: recipes that arrived from outside ---------- */
+.review-entry { display: flex; align-items: center; gap: 10px; width: calc(100% - 2 * var(--gutter)); margin: 2px var(--gutter) 12px; padding: 12px 12px 12px 14px; border-radius: 12px; background: var(--soft); color: var(--onsoft); font-weight: 600; font-size: 16px; }
+.review-entry-label { flex: 1; }
+.review-entry-count { min-width: 26px; height: 26px; padding: 0 8px; border-radius: 13px; display: grid; place-items: center; background: var(--acc); color: var(--onacc); font-size: 14px; font-variant-numeric: tabular-nums; }
+.review-entry .icon { width: 18px; height: 18px; }
+.review-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 var(--gutter) 4px; }
+.review-head-title { font-weight: 700; }
+.review-top { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line); }
+.review-origin { display: flex; align-items: baseline; gap: 10px; padding: 0 var(--gutter) 10px; }
+.review-origin-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.review-origin a { flex: none; text-decoration: underline; text-underline-offset: 2px; }
+.review-notes { margin: 14px var(--gutter) 6px; padding: 12px 14px; border-radius: 12px; background: var(--bg2); color: var(--ink2); font-size: 15px; display: flex; flex-direction: column; gap: 6px; max-width: 42rem; }
+.review-top + .editor { padding-top: 14px; }
+.review-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.review-buttons .btn-main { flex: 1; }
+
+/* ---------- the steps for making the Shortcut ---------- */
+.howto { counter-reset: howto; display: flex; flex-direction: column; gap: 24px; }
+.howto-step { counter-increment: howto; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.howto-step > h3 { font-size: 17px; font-weight: 700; }
+.howto-step > h3::before { content: counter(howto) ". "; color: var(--acc); }
+.howto p, .howto-ask li { color: var(--ink2); font-size: 15px; }
+.howto b { color: var(--ink); font-weight: 600; }
+.howto-list { display: flex; flex-direction: column; gap: 12px; align-self: stretch; }
+.howto-list li { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.howto-note { background: var(--soft); color: var(--onsoft); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+.howto-ask { display: flex; flex-direction: column; gap: 6px; padding-left: 1.2em; list-style: disc; }
+.howto-code { align-self: stretch; }
+.howto-code summary { color: var(--acc); font-size: 15px; cursor: pointer; padding: 4px 0; }
+.howto-code pre { margin: 6px 0 0; max-height: 16rem; overflow: auto; background: var(--bg2); border-radius: 11px; padding: 10px 12px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.copy { display: flex; align-items: center; gap: 10px; align-self: stretch; background: var(--bg2); border-radius: 11px; padding: 6px 6px 6px 12px; }
+.copy-text { flex: 1; min-width: 0; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink); overflow-wrap: anywhere; }
+.copy-btn { flex: none; min-height: 36px; padding: 0 12px; border-radius: 9px; background: var(--bg); border: 1px solid var(--line); color: var(--acc); font-weight: 600; font-size: 14px; }
+
 @container (min-width: 46rem) {
   .editor, .settings { padding-inline: 32px; }
+  .review-origin { padding-inline: 32px; }
+  .review-notes { margin-inline: 32px; }
 }

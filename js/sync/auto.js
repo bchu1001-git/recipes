@@ -6,8 +6,11 @@ import { library, subscribe, snapshot, applySync, saveBase, saveLibrary, forgetL
 import { createClient, GitHubError } from './github.js';
 import { syncLibrary } from './sync.js';
 
-/** state: 'off' (no library), 'idle', 'syncing' or 'error'. `at` is the time of the last good sync. */
-export const status = { state: 'off', at: null, message: '', sent: 0, received: 0 };
+/**
+ * state: 'off' (no library), 'idle', 'syncing' or 'error'. `at` is the time of the last good sync.
+ * `toReview` is how many recipes that sync brought to this device to be reviewed.
+ */
+export const status = { state: 'off', at: null, message: '', sent: 0, received: 0, toReview: 0 };
 
 const listeners = new Set();
 export function onStatus(fn) {
@@ -63,7 +66,8 @@ export async function syncNow() {
     });
     await applySync(out, snap);
     await saveBase(out.base);
-    set({ state: 'idle', at: Date.now(), message: '', sent: out.sent, received: out.received });
+    const toReview = out.recipes.filter((r) => r.review && !snap.seen.has(r.id)).length;
+    set({ state: 'idle', at: Date.now(), message: '', sent: out.sent, received: out.received, toReview });
     ok = true;
   } catch (err) {
     unsent = true;
@@ -89,7 +93,7 @@ export async function connect({ owner, repo, token, device }) {
 export async function disconnect() {
   clearTimeout(timer);
   await forgetLibrary();
-  set({ state: 'off', at: null, message: '', sent: 0, received: 0 });
+  set({ state: 'off', at: null, message: '', sent: 0, received: 0, toReview: 0 });
 }
 
 export function startAutoSync() {

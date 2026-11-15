@@ -70,12 +70,17 @@ export function createClient({ owner, repo, token, fetch: doFetch, api = 'https:
       }
     },
 
-    /** Every file in a tree as Map<path, hash>. */
+    /** Every file in a tree: `files` is Map<path, hash> and `sizes` is Map<path, size in bytes>. */
     async tree(sha) {
       const data = await call('GET', '/git/trees/' + sha + '?recursive=1');
       const files = new Map();
-      for (const entry of data.tree || []) if (entry.type === 'blob') files.set(entry.path, entry.sha);
-      return files;
+      const sizes = new Map();
+      for (const entry of data.tree || []) {
+        if (entry.type !== 'blob') continue;
+        files.set(entry.path, entry.sha);
+        sizes.set(entry.path, entry.size || 0);
+      }
+      return { files, sizes };
     },
 
     async blob(sha) {

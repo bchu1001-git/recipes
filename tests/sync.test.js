@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeGitHub } from './fake-github.js';
 import { createClient, GitHubError } from '../js/sync/github.js';
-import { syncLibrary } from '../js/sync/sync.js';
+import { syncLibrary, isCapture, captureId } from '../js/sync/sync.js';
 import { gitBlobSha } from '../js/sync/hash.js';
 import { makeRecipe, starterFolders } from '../js/model.js';
 
@@ -19,7 +19,7 @@ function device(name, hub, token = 'good-key') {
     remove(id) { d.recipes = d.recipes.filter((r) => r.id !== id); d.deleted = { ...d.deleted, [id]: tick() }; },
     titles() { return d.recipes.filter((r) => !r.example).map((r) => r.title).sort(); },
     async sync() {
-      const out = await syncLibrary({ client: d.client, local: { recipes: d.recipes, folders: d.folders, deleted: d.deleted }, base: d.base, device: name });
+      const out = await syncLibrary({ client: d.client, local: { recipes: d.recipes, folders: d.folders, deleted: d.deleted }, base: d.base, device: name, ...(d.now ? { now: d.now } : {}) });
       d.recipes = [...out.recipes, ...d.recipes.filter((r) => r.example)];
       d.folders = out.folders; d.deleted = out.deleted; d.base = out.base;
       return out;
@@ -217,4 +217,266 @@ test('client: reports whether the key may write', async () => {
   const no = createClient({ owner: 'someone', repo: 'library', token: 'good-key', fetch: fakeGitHub({ canWrite: false }).fetch });
   assert.deepEqual(await yes.about(), { branch: 'main', canWrite: true, isPrivate: true });
   assert.equal((await no.about()).canWrite, false);
+});
+
+// ---------- pages saved into the inbox ----------
+
+const INBOX_FILE = 'inbox/20251231-230000.json';
+const SAVED_AT = '2025-12-31T23:00:00.000Z';
+// A page as the Save to Recipes Shortcut would save it. The site and the recipe are made up.
+const page = (more = {}) => ({
+  v: 1,
+  url: 'https://www.maplestreetkitchen.example/recipes/lentil-soup',
+  title: 'Lentil soup | Maple Street Kitchen',
+  at: SAVED_AT,
+  ld: [JSON.stringify({
+    '@context': 'https://schema.org', '@type': 'Recipe', name: 'Lentil soup',
+    recipeIngredient: ['1 cup lentils', '1 onion, diced'], recipeInstructions: ['Simmer for 30 minutes.'],
+  })],
+  ...more,
+});
+const save = (hub, path = INBOX_FILE, capture = page()) => hub.write(path, JSON.stringify(capture), 'Saved from Safari');
+const inboxOf = (hub) => [...hub.files().keys()].filter((p) => p.startsWith('inbox/'));
+const recipeFiles = (hub) => [...hub.files().keys()].filter((p) => p.startsWith('recipes/'));
+
+test('inbox: only a page capture counts as one', () => {
+  assert.equal(isCapture({ ld: [] }), true);
+  assert.equal(isCapture({ url: 'https://www.maplestreetkitchen.example/' }), true);
+  assert.equal(isCapture({ job: 'link', url: 'https://www.maplestreetkitchen.example/' }), false);
+  assert.equal(isCapture({ title: 'No list and no address' }), false);
+  for (const no of [null, undefined, 3, 'text', [1], [{ ld: [] }]]) assert.equal(isCapture(no), false);
+});
+
+test('inbox: a saved page becomes a recipe to review and its file leaves the inbox, in one commit', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  phone.add({ title: 'Tacos' });
+  await phone.sync();
+  save(hub);
+  const before = hub.history().length;
+  const out = await phone.sync();
+  assert.equal(out.added, 1);
+  assert.deepEqual(inboxOf(hub), []);
+  assert.equal(hub.history().length, before + 1);
+  assert.equal(hub.history()[0], 'Phone: 1 new from the inbox');
+  const soup = phone.recipes.find((r) => r.title === 'Lentil soup');
+  assert.equal(soup.review, true);
+  assert.deepEqual(soup.source, { kind: 'web', name: 'maplestreetkitchen.example', url: 'https://www.maplestreetkitchen.example/recipes/lentil-soup' });
+  assert.equal(soup.created, SAVED_AT);
+  assert.equal(soup.updated, SAVED_AT);
+  assert.deepEqual(soup.ingredients.map((i) => i.text), ['1 cup lentils', '1 onion, diced']);
+  assert.equal(JSON.parse(hub.files().get('recipes/' + soup.id + '.json')).title, 'Lentil soup');
+  assert.deepEqual(phone.titles(), ['Lentil soup', 'Tacos']);
+});
+
+test('inbox: the call the Shortcut makes puts a page in the inbox, and the same name is refused a second time', async () => {
+  const hub = fakeGitHub({ empty: false });
+  const body = { message: 'Saved from Safari', content: Buffer.from(JSON.stringify(page()), 'utf8').toString('base64') };
+  assert.equal(hub.handle('PUT', '/contents/' + INBOX_FILE, body, 'Bearer wrong-key')[0], 401);
+  assert.equal(hub.handle('PUT', '/contents/' + INBOX_FILE, body, 'Bearer good-key')[0], 201);
+  assert.equal(hub.handle('PUT', '/contents/' + INBOX_FILE, body, 'Bearer good-key')[0], 422);
+  const phone = device('Phone', hub);
+  await phone.sync();
+  assert.deepEqual(phone.titles(), ['Lentil soup']);
+  assert.deepEqual(inboxOf(hub), []);
+});
+
+test('inbox: a second device receives the same recipe, not a second one', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  const mac = device('Mac', hub);
+  await phone.sync(); await mac.sync();
+  save(hub);
+  await phone.sync();
+  const out = await mac.sync();
+  assert.equal(out.added, 0);
+  assert.equal(out.received, 1);
+  assert.equal(recipeFiles(hub).length, 1);
+  assert.deepEqual(mac.recipes, phone.recipes);
+});
+
+test('inbox: two devices reading the same page at the same moment end with one recipe', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  const mac = device('Mac', hub);
+  await phone.sync(); await mac.sync();
+  save(hub);
+  // Both start before either has finished. Whichever is second finds the branch moved and starts over.
+  const [first, second] = await Promise.all([phone.sync(), mac.sync()]);
+  assert.equal(first.added + second.added, 1);
+  await phone.sync(); await mac.sync();
+  assert.equal(recipeFiles(hub).length, 1);
+  assert.deepEqual(inboxOf(hub), []);
+  assert.equal(phone.recipes.length, 1);
+  assert.deepEqual(mac.recipes, phone.recipes);
+});
+
+test('inbox: a device that loses the race takes the other device\'s recipe and makes none of its own', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  await phone.sync();
+  const text = JSON.stringify(page());
+  hub.write(INBOX_FILE, text, 'Saved from Safari');
+  const id = await captureId(INBOX_FILE, await gitBlobSha(text));
+  // The Mac gets there first, just as the phone is about to move the branch.
+  hub.onNextMove(() => {
+    hub.write('recipes/' + id + '.json', JSON.stringify({ ...makeRecipe({ id, title: 'Lentil soup', review: true, by: 'Mac' }, SAVED_AT) }), 'Mac: 1 new from the inbox');
+    hub.write(INBOX_FILE, null, 'Mac: inbox cleared');
+  });
+  const out = await phone.sync();
+  assert.equal(out.added, 0);
+  assert.equal(recipeFiles(hub).length, 1);
+  assert.equal(phone.recipes.length, 1);
+  assert.equal(phone.recipes[0].id, id);
+  assert.equal(phone.recipes[0].by, 'Mac');
+});
+
+test('inbox: a page that was already made into a recipe, or discarded, is not brought back', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  await phone.sync();
+  save(hub);
+  await phone.sync();
+  const soup = phone.recipes[0];
+  phone.edit(soup.id, { title: 'Lentil soup, my way', review: false });
+  await phone.sync();
+
+  save(hub);   // the very same file turns up again
+  const again = await phone.sync();
+  assert.equal(again.added, 0);
+  assert.deepEqual(inboxOf(hub), []);
+  assert.deepEqual(phone.titles(), ['Lentil soup, my way']);
+  assert.equal(hub.history()[0], 'Phone: inbox cleared');
+
+  phone.remove(soup.id);
+  await phone.sync();
+  save(hub);
+  const afterDiscard = await phone.sync();
+  assert.equal(afterDiscard.added, 0);
+  assert.deepEqual(inboxOf(hub), []);
+  assert.deepEqual(phone.titles(), []);
+  assert.deepEqual(recipeFiles(hub), []);
+});
+
+test('inbox: files that are not saved pages are left exactly as they are, and are not downloaded twice', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  phone.add({ title: 'Tacos' });
+  await phone.sync();
+  const others = {
+    'inbox/job-1.json': JSON.stringify({ job: 'link', url: 'https://www.maplestreetkitchen.example/recipes/lentil-soup' }),
+    'inbox/broken.json': '{ not json',
+    'inbox/list.json': '[1, 2, 3]',
+    'inbox/number.json': '42',
+    'inbox/note.txt': 'not a json file',
+    'inbox/photo.jpg': 'pretend picture',
+    'inbox/deeper/page.json': JSON.stringify(page()),
+    'inbox/huge.json': JSON.stringify(page({ text: 'x'.repeat(1600000) })),
+  };
+  for (const [path, text] of Object.entries(others)) hub.write(path, text, 'Something else');
+  const before = hub.history().length;
+  hub.forgetCalls();
+  const out = await phone.sync();
+  assert.equal(out.added, 0);
+  assert.equal(hub.history().length, before);   // no commit at all
+  for (const [path, text] of Object.entries(others)) assert.equal(hub.files().get(path), text);
+  assert.deepEqual(phone.titles(), ['Tacos']);
+  // Only the four small .json files directly in inbox/ were looked at; the huge one was never fetched.
+  assert.equal(hub.calls().filter((c) => c.startsWith('GET /git/blobs/')).length, 4);
+
+  hub.forgetCalls();
+  await phone.sync();
+  assert.deepEqual(hub.calls().map((c) => c.split(' ')[0]), ['GET', 'GET', 'GET']);   // none looked at again
+
+  hub.write('inbox/broken.json', JSON.stringify(page()), 'Mended');   // once it changes, it is looked at again
+  await phone.sync();
+  assert.deepEqual(phone.titles(), ['Lentil soup', 'Tacos']);
+  assert.equal(hub.files().has('inbox/broken.json'), false);
+  assert.equal(hub.files().get('inbox/job-1.json'), others['inbox/job-1.json']);
+});
+
+test('inbox: a page with no recipe data still arrives, as a title and a link to fill in', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  await phone.sync();
+  save(hub, INBOX_FILE, { v: 1, url: 'https://www.maplestreetkitchen.example/about', title: 'About us | Maple Street Kitchen', ld: [] });
+  const out = await phone.sync();
+  assert.equal(out.added, 1);
+  const draft = phone.recipes[0];
+  assert.equal(draft.review, true);
+  assert.equal(draft.title, 'About us');
+  assert.equal(draft.source.url, 'https://www.maplestreetkitchen.example/about');
+  assert.deepEqual(draft.ingredients, []);
+});
+
+test('inbox: a page with no time, or a time that has not happened yet, is stamped with now', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  phone.now = '2026-02-01T10:00:00.000Z';
+  await phone.sync();
+  save(hub, 'inbox/a.json', page({ at: undefined }));
+  save(hub, 'inbox/b.json', page({ at: '2031-05-05T00:00:00.000Z' }));
+  save(hub, 'inbox/c.json', page({ at: 'yesterday afternoon' }));
+  save(hub, 'inbox/d.json', page());
+  await phone.sync();
+  assert.equal(phone.recipes.length, 4);
+  assert.deepEqual(phone.recipes.map((r) => r.updated).sort(), [SAVED_AT, phone.now, phone.now, phone.now]);
+  assert.equal(new Set(phone.recipes.map((r) => r.id)).size, 4);
+});
+
+test('inbox: a page that cannot be fetched this time does not stop the sync, and is read the next time', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  phone.add({ title: 'Tacos' });
+  await phone.sync();
+  save(hub);
+  const blob = phone.client.blob;
+  phone.client.blob = async () => { throw new GitHubError(502, 'Bad gateway'); };
+  phone.add({ title: 'Salad' });
+  const out = await phone.sync();
+  assert.equal(out.added, 0);
+  assert.equal(out.sent, 1);
+  assert.deepEqual(inboxOf(hub), [INBOX_FILE]);
+  phone.client.blob = blob;
+  await phone.sync();
+  assert.deepEqual(phone.titles(), ['Lentil soup', 'Salad', 'Tacos']);
+  assert.deepEqual(inboxOf(hub), []);
+});
+
+test('inbox: losing the connection while reading a page stops the sync, so it is tried again', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  await phone.sync();
+  save(hub);
+  phone.client.blob = async () => { throw new GitHubError(0, 'No connection'); };
+  await assert.rejects(phone.sync(), (err) => err instanceof GitHubError && err.status === 0);
+  assert.deepEqual(inboxOf(hub), [INBOX_FILE]);
+});
+
+test('inbox: odd things inside a capture cannot stop a sync', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  phone.add({ title: 'Tacos' });
+  await phone.sync();
+  save(hub, 'inbox/odd.json', { ld: [12, null, { a: 1 }, '{ broken', '<b>not data</b>'], url: 7, title: { x: 1 }, at: 99 });
+  const out = await phone.sync();
+  assert.equal(out.added, 1);
+  assert.deepEqual(inboxOf(hub), []);
+  const draft = phone.recipes.find((r) => r.review);
+  assert.equal(draft.title, '');
+  assert.equal(draft.source.url, '');
+  assert.deepEqual(phone.titles(), ['', 'Tacos']);
+});
+
+test('inbox: the made-up examples and unknown fields are still handled as before when a page arrives', async () => {
+  const hub = fakeGitHub({ empty: false });
+  hub.write('recipes/rfuture.json', JSON.stringify({ ...makeRecipe({ id: 'rfuture', title: 'From a newer app' }, tick()), nutrition: { calories: 320 } }, null, 2) + '\n', 'Newer app');
+  const phone = device('Phone', hub);
+  phone.add({ title: 'Example soup', example: true });
+  save(hub);
+  await phone.sync();
+  assert.deepEqual(recipeFiles(hub).length, 2);
+  assert.deepEqual(JSON.parse(hub.files().get('recipes/rfuture.json')).nutrition, { calories: 320 });
+  assert.equal(phone.recipes.filter((r) => r.example).length, 1);
+  assert.deepEqual(phone.titles(), ['From a newer app', 'Lentil soup']);
 });

@@ -4,7 +4,7 @@
 import { h, icon, sheet, confirmSheet, go, toast } from './dom.js';
 import { state, subscribe, saveRecipe, deleteRecipe } from '../store.js';
 import { ui, setUi, ticksFor } from './state.js';
-import { amountLabel, itemLabel, formatMinutes, folderIndex } from '../model.js';
+import { amountLabel, itemLabel, formatMinutes, folderIndex, webLink } from '../model.js';
 
 const TABS = [['ing', 'Ingredients'], ['steps', 'Steps'], ['notes', 'Notes']];
 
@@ -120,8 +120,8 @@ export function renderRecipe(root, id) {
           h('p', { class: 'meta' },
             meta.join(' · '),
             meta.length && recipe.source.name ? ' · ' : '',
-            recipe.source.url
-              ? h('a', { href: recipe.source.url, target: '_blank', rel: 'noopener noreferrer', text: recipe.source.name || 'Source' })
+            webLink(recipe.source.url)
+              ? h('a', { href: webLink(recipe.source.url), target: '_blank', rel: 'noopener noreferrer', text: recipe.source.name || 'Source' })
               : recipe.source.name),
           rating(recipe),
           tabs,

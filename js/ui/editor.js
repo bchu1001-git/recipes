@@ -1,13 +1,18 @@
 // Adding a recipe by hand, and editing one. Ingredients and steps are typed one per line.
+// The review screen (review.js) shows the same fields for a recipe that arrived from outside.
 
 import { h, icon, go } from './dom.js';
 import { state, saveRecipe } from '../store.js';
 import { linesOf, splitLines, formatMinutes } from '../model.js';
 
-export function renderEditor(root, id) {
-  const existing = id ? state.recipes.get(id) : null;
+/**
+ * The fields of a recipe as form controls, filled in from `existing` when there is one.
+ *
+ * Returns { nodes, read, title }. `nodes` go inside a form. `read(form)` gives what to hand to
+ * saveRecipe, or shows what is missing and returns null. `title` is the title box, for focus.
+ */
+export function recipeFields(existing) {
   const picked = new Set(existing ? existing.folders : []);
-  const backTo = existing ? '#/r/' + existing.id : '#/';
 
   const field = (label, control, hint) => h('label', { class: 'field' },
     h('span', { class: 'field-label', text: label }), control, hint ? h('span', { class: 'field-hint', text: hint }) : null);
@@ -30,15 +35,30 @@ export function renderEditor(root, id) {
   };
   drawFolders();
 
-  const form = h('form', { class: 'pane-scroll', novalidate: true, onsubmit: async (e) => {
-    e.preventDefault();
+  const nodes = [
+    field('Title', title), problem,
+    h('div', { class: 'field-pair' },
+      field('Time', input('time', existing ? formatMinutes(existing.minutes) : '', { placeholder: '45 min', inputmode: 'text' })),
+      field('Serves', input('serves', existing && existing.serves, { placeholder: '4' }))),
+    field('Ingredients', area('ingredients', existing ? linesOf(existing.ingredients) : '', 8), 'One per line, written the way you would say it: 2 carrots, sliced'),
+    field('Steps', area('steps', existing ? linesOf(existing.steps) : '', 8), 'One per line'),
+    field('My notes', area('mine', existing && existing.notes.mine, 3)),
+    field('Where it came from', input('source', existing && existing.source.name, { placeholder: 'A cookbook, a person, a site' })),
+    field('Link', input('url', existing && existing.source.url, { type: 'url', inputmode: 'url', placeholder: 'https://' })),
+    field('Notes from the source', area('fromsource', existing && existing.notes.source, 3)),
+    h('h2', { class: 'editor-heading', text: 'Folders' }),
+    folders,
+  ];
+
+  const read = (form) => {
     const data = new FormData(form);
     if (!String(data.get('title') || '').trim()) {
       problem.textContent = 'Give the recipe a title.';
       title.focus();
-      return;
+      return null;
     }
-    const recipe = await saveRecipe({
+    problem.textContent = '';
+    return {
       ...(existing || {}),
       title: data.get('title'),
       source: { kind: existing ? existing.source.kind : 'manual', name: data.get('source'), url: data.get('url') },
@@ -48,7 +68,22 @@ export function renderEditor(root, id) {
       steps: splitLines(data.get('steps')),
       notes: { mine: data.get('mine'), source: data.get('fromsource') },
       folders: [...picked],
-    });
+    };
+  };
+
+  return { nodes, read, title };
+}
+
+export function renderEditor(root, id) {
+  const existing = id ? state.recipes.get(id) : null;
+  const backTo = existing ? '#/r/' + existing.id : '#/';
+  const fields = recipeFields(existing);
+
+  const form = h('form', { class: 'pane-scroll', novalidate: true, onsubmit: async (e) => {
+    e.preventDefault();
+    const input = fields.read(form);
+    if (!input) return;
+    const recipe = await saveRecipe(input);
     go('r/' + recipe.id);
   } },
     h('header', { class: 'bar bar-detail' },
@@ -56,21 +91,10 @@ export function renderEditor(root, id) {
       h('span', { class: 'bar-heading', text: existing ? 'Edit recipe' : 'New recipe' }),
       h('button', { class: 'bar-save', type: 'submit' }, 'Save')),
     h('div', { class: 'editor' },
-      field('Title', title), problem,
-      h('div', { class: 'field-pair' },
-        field('Time', input('time', existing ? formatMinutes(existing.minutes) : '', { placeholder: '45 min', inputmode: 'text' })),
-        field('Serves', input('serves', existing && existing.serves, { placeholder: '4' }))),
-      field('Ingredients', area('ingredients', existing ? linesOf(existing.ingredients) : '', 8), 'One per line, written the way you would say it: 2 carrots, sliced'),
-      field('Steps', area('steps', existing ? linesOf(existing.steps) : '', 8), 'One per line'),
-      field('My notes', area('mine', existing && existing.notes.mine, 3)),
-      field('Where it came from', input('source', existing && existing.source.name, { placeholder: 'A cookbook, a person, a site' })),
-      field('Link', input('url', existing && existing.source.url, { type: 'url', inputmode: 'url', placeholder: 'https://' })),
-      field('Notes from the source', area('fromsource', existing && existing.notes.source, 3)),
-      h('h2', { class: 'editor-heading', text: 'Folders' }),
-      folders,
+      fields.nodes,
       h('button', { class: 'btn btn-main editor-save', type: 'submit' }, 'Save')));
 
   root.replaceChildren(form);
-  if (!existing) title.focus({ preventScroll: true });
+  if (!existing) fields.title.focus({ preventScroll: true });
   return () => {};
 }

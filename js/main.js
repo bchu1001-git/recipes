@@ -1,13 +1,16 @@
 // Starts the app: loads the library saved on this device, draws the list, and shows
-// whatever the address asks for (#/r/<id>, #/new, #/edit/<id>, #/settings).
+// whatever the address asks for (#/r/<id>, #/new, #/edit/<id>, #/settings, #/save).
+// A recipe that is still waiting for review opens on the review screen instead of its own page.
 
 import { init, state } from './store.js';
 import { h, toast } from './ui/dom.js';
-import { renderHome, renderSide } from './ui/home.js';
+import { renderHome, renderSide, openReview } from './ui/home.js';
 import { renderRecipe } from './ui/recipe.js';
 import { renderEditor } from './ui/editor.js';
+import { renderReview } from './ui/review.js';
+import { renderSaveSetup } from './ui/save.js';
 import { renderSettings, applyAppearance, appearance } from './ui/settings.js';
-import { startAutoSync } from './sync/auto.js';
+import { startAutoSync, status, onStatus } from './sync/auto.js';
 
 const app = document.getElementById('app');
 const side = document.getElementById('side');
@@ -19,10 +22,13 @@ function route() {
   const [name, id] = location.hash.replace(/^#\/?/, '').split('/');
   if (leave) { leave(); leave = null; }
   let view = 'detail';
-  if (name === 'r' && state.recipes.has(id)) leave = renderRecipe(detail, id);
+  const recipe = state.recipes.get(id);
+  if ((name === 'r' || name === 'edit') && recipe && recipe.review) leave = renderReview(detail, id);
+  else if (name === 'r' && recipe) leave = renderRecipe(detail, id);
   else if (name === 'new') leave = renderEditor(detail, null);
-  else if (name === 'edit' && state.recipes.has(id)) leave = renderEditor(detail, id);
+  else if (name === 'edit' && recipe) leave = renderEditor(detail, id);
   else if (name === 'settings') leave = renderSettings(detail);
+  else if (name === 'save') leave = renderSaveSetup(detail);
   else {
     view = 'list';
     detail.replaceChildren(h('div', { class: 'placeholder' },
@@ -43,6 +49,17 @@ function registerWorker() {
   });
 }
 
+/** Says so when a sync brings recipes to review, wherever in the app the person happens to be. */
+function announceArrivals() {
+  let told = null;
+  onStatus(() => {
+    if (status.state !== 'idle' || !status.toReview || status.at === told) return;
+    told = status.at;
+    toast(status.toReview === 1 ? 'A new recipe is waiting for review' : status.toReview + ' new recipes are waiting for review',
+      { label: 'Review', run: openReview });
+  });
+}
+
 async function start() {
   applyAppearance(appearance());
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyAppearance(appearance()));
@@ -52,6 +69,7 @@ async function start() {
   route();
   addEventListener('hashchange', route);
   if (!state.saved) toast('This browser is not saving data. Recipes will be gone when the tab closes.');
+  announceArrivals();
   startAutoSync();
   registerWorker();
 }

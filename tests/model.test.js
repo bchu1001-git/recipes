@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseIngredient, amountLabel, itemLabel, findTimers, parseDuration, formatMinutes, makeRecipe,
   matchesQuery, matchesFilters, starterFolders, newFolderId, initials, sortRecipes, splitLines, slug,
+  webLink, keptRecipes, waitingRecipes, reviewNotes,
 } from '../js/model.js';
 
 const ing = (line) => {
@@ -158,4 +159,33 @@ test('small helpers', () => {
   assert.equal(initials(''), '?');
   assert.deepEqual(splitLines('a\n\n b \r\nc'), ['a', 'b', 'c']);
   assert.deepEqual(sortRecipes([tacos, soup, stew]).map((r) => r.title), ['Beef and barley stew', 'Black bean tacos', 'Chicken noodle soup']);
+});
+
+test('links: only an ordinary web address may be used as a link', () => {
+  assert.equal(webLink('https://www.maplestreetkitchen.example/soup'), 'https://www.maplestreetkitchen.example/soup');
+  assert.equal(webLink('  http://example.org/a?b=1  '), 'http://example.org/a?b=1');
+  for (const no of ['javascript:alert(1)', 'data:text/html,hi', 'ftp://example.org', 'example.org', 'https://exa mple.org', '', null, undefined, 7]) {
+    assert.equal(webLink(no), '');
+  }
+});
+
+test('review: waiting recipes are kept apart from the others, newest first', () => {
+  const made = (title, created, review) => ({ ...makeRecipe({ title, review }, created) });
+  const all = [made('Kept', '2026-01-01T00:00:00.000Z', false), made('Older', '2026-01-02T00:00:00.000Z', true), made('Newer', '2026-01-03T00:00:00.000Z', true)];
+  assert.deepEqual(keptRecipes(all).map((r) => r.title), ['Kept']);
+  assert.deepEqual(waitingRecipes(all).map((r) => r.title), ['Newer', 'Older']);
+  assert.deepEqual(waitingRecipes(new Map(all.map((r) => [r.id, r])).values()).length, 2);
+});
+
+test('review: says in plain words what is missing from a recipe that was read from a page', () => {
+  const full = makeRecipe({ title: 'Lentil soup', ingredients: ['1 cup lentils'], steps: ['Simmer.', 'Serve.'] });
+  assert.deepEqual(reviewNotes(full), []);
+  assert.deepEqual(reviewNotes(makeRecipe({ title: 'Lentil soup', steps: ['Simmer.'] })), ['No ingredients were found.']);
+  assert.deepEqual(reviewNotes(makeRecipe({ title: 'Lentil soup', ingredients: ['1 cup lentils'] })), ['No steps were found.']);
+  const block = makeRecipe({ title: 'Lentil soup', ingredients: ['1 cup lentils'], steps: ['Stir. '.repeat(90)] });
+  assert.match(reviewNotes(block)[0], /one block of text/);
+  const empty = reviewNotes(makeRecipe({ title: '' }));
+  assert.equal(empty.length, 2);
+  assert.match(empty[0], /No recipe was found on the page/);
+  assert.equal(empty[1], 'No title was found.');
 });

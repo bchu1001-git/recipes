@@ -193,6 +193,40 @@ export function splitLines(text) {
   return String(text || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
 
+// ---------- recipes waiting for review ----------
+
+/** A web address that is safe to use as a link: http or https only. Anything else gives ''. */
+export function webLink(url) {
+  const address = clean(url);
+  return /^https?:\/\/\S+$/i.test(address) ? address : '';
+}
+
+/** The recipes someone has decided to keep: everything that is not waiting under To review. */
+export function keptRecipes(list) {
+  return [...list].filter((r) => !r.review);
+}
+
+/** Recipes that arrived from outside and still wait to be checked. Newest first. */
+export function waitingRecipes(list) {
+  return [...list].filter((r) => r.review).sort((a, b) => b.created.localeCompare(a.created) || a.id.localeCompare(b.id));
+}
+
+/** What to check on a recipe that was read from somewhere else, worked out from the recipe itself. */
+export function reviewNotes(recipe) {
+  const notes = [];
+  const steps = recipe.steps || [];
+  const ingredients = recipe.ingredients || [];
+  if (!ingredients.length && !steps.length) {
+    notes.push('No recipe was found on the page. Open it and type or paste the recipe here, or discard this.');
+  } else {
+    if (!ingredients.length) notes.push('No ingredients were found.');
+    if (!steps.length) notes.push('No steps were found.');
+    else if (steps.length === 1 && steps[0].text.length > 400) notes.push('The steps came as one block of text. Put each step on its own line.');
+  }
+  if (!recipe.title) notes.push('No title was found.');
+  return notes;
+}
+
 // ---------- finding ----------
 
 /** Every word of the search must appear somewhere in the title, source, ingredients, steps or notes. */

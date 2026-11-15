@@ -22,9 +22,18 @@ Built and working:
 - Syncing between devices through a private GitHub repository (a "library"): connect in Settings with
   the library's name and a key. It syncs when the app opens, a few seconds after a change, when you
   pull the list down, and when you tap the status next to the title.
+- **To review:** a recipe that arrives from outside waits apart from the others until you keep it or
+  discard it. Its screen shows where it came from, a link to the original, what looks missing, and
+  the same fields as the editor.
+- Saving a recipe page from Safari, on the app's side: a page that lands in the library's `inbox/`
+  becomes a recipe to review at the next sync, read from the recipe data the page carries. Settings,
+  Save from Safari has the steps for making the "Save to Recipes" Shortcut that puts it there.
 
-Not built yet, in this order: saving links from Safari, reading screenshots and photos, the kitchen
-view with timers, sharing with other people. See [docs/decisions.md](docs/decisions.md) for what was decided and
+Built but not proven: the "Save to Recipes" Shortcut itself. Its steps are a first try that nobody has
+run on a phone yet.
+
+Not built yet, in this order: pasting a link inside the app and importing a bookmarks file, reading
+screenshots and photos, the kitchen view with timers, sharing with other people. See [docs/decisions.md](docs/decisions.md) for what was decided and
 [docs/architecture.md](docs/architecture.md) for how the pieces will fit.
 
 A device that is not connected to a library keeps its recipes only in its own browser. Use Settings,
@@ -46,9 +55,10 @@ node --test tests/*.test.js
 ```
 
 The tests cover the data logic (reading an ingredient line into amount, unit and item, finding times in
-a step, search and folder filtering), the rules for merging two copies of a library, and syncing
-against a stand-in for GitHub kept in memory. They need Node.js 20 or later and nothing else. The app
-itself does not need Node.
+a step, search and folder filtering), the rules for merging two copies of a library, syncing against
+a stand-in for GitHub kept in memory (including pages waiting in a library's inbox), reading the recipe
+data in a web page, and the script the Shortcut runs on a page. They need Node.js 20
+or later and nothing else. The app itself does not need Node.
 
 To try syncing in a browser without touching GitHub, run `node scripts/dev-server.mjs` and follow the
 three lines at the top of that file.
@@ -88,14 +98,16 @@ on the other. If both changed the same lines it stops and says which files, with
 | `css/app.css` | All styling. Light and dark differ only in the color tokens at the top |
 | `js/model.js` | Data rules with no screen or storage in them: recipes, ingredient lines, timers, search, folders |
 | `js/store.js` | The library on this device, kept in the browser's IndexedDB |
-| `js/sync/` | Syncing: `github.js` (the few GitHub calls), `merge.js` (how two copies become one), `sync.js` (one round), `auto.js` (when to sync) |
-| `js/ui/` | The screens: `home.js` (list, filters, sidebar), `recipe.js`, `editor.js`, `settings.js`, and helpers in `dom.js` |
+| `js/sync/` | Syncing: `github.js` (the few GitHub calls), `merge.js` (how two copies become one), `sync.js` (one round, including pages waiting in the inbox), `auto.js` (when to sync) |
+| `js/import/` | Reading recipes that come from outside. `page.js` turns the recipe data a web page carries into a recipe waiting for review; syncing uses it for pages in the inbox |
+| `shortcuts/` | `save-page.js`, the script the "Save to Recipes" Shortcut runs on the page open in Safari |
+| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `save.js` (the steps for making the Shortcut), `settings.js`, and helpers in `dom.js` |
 | `js/sample.js` | Three made-up example recipes |
 | `sw.template.js` | The worker that keeps a copy of the app for offline use. Edit this one |
 | `sw.js`, `js/version.js` | Generated from the template by `scripts/publish.sh` on every publish. Never edit by hand |
 | `manifest.webmanifest`, `icons/` | Name and icon for the Home Screen and Dock |
 | `proofs/` | Small test pages for things that had to be tried on a real phone |
-| `tests/` | Tests for the data rules, merging and syncing, plus `fake-github.js`, the stand-in they sync against |
+| `tests/` | Tests for the data rules, merging, syncing, the inbox, the web-page reader and the page script, plus `fake-github.js`, the stand-in they sync against |
 | `scripts/` | `serve.sh` to run it locally, `publish.sh` to publish, `dev-server.mjs` to try syncing locally |
 | `docs/` | Decisions, architecture, and the steps only the owner can take |
 

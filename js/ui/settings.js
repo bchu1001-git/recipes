@@ -1,4 +1,4 @@
-// Settings: appearance, folders, backup, and the example recipes.
+// Settings: appearance, folders, the library, saving from Safari, backup, and the example recipes.
 
 import { h, icon, sheet, confirmSheet, toast } from './dom.js';
 import { state, library, subscribe, saveFolders, removeFolder, saveRecipe, deleteRecipe, exportAll, importAll } from '../store.js';
@@ -189,6 +189,13 @@ export function renderSettings(root) {
               h('button', { class: 'chip chip-add', type: 'button', onclick: () => addFolder(g) }, icon('plus'), 'Add'))))),
 
         librarySection(count),
+
+        h('section', { class: 'set' },
+          h('h2', { class: 'label', text: 'Save from Safari' }),
+          h('p', { class: 'set-note', text: library.config
+            ? 'Put Save to Recipes in Safari\u2019s share sheet. A recipe page you are reading then lands here, under To review.'
+            : 'Saving a recipe page from Safari writes it into your library, so connect a library first.' }),
+          library.config ? h('a', { class: 'btn btn-quiet', href: '#/save' }, 'Set up Save to Recipes') : null),
 
         h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Backup' }),

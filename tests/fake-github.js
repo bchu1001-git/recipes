@@ -50,7 +50,7 @@ export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true }
     }
     if (method === 'GET' && (m = /^\/git\/trees\/(\w+)\?recursive=1$/.exec(path))) {
       const t = trees.get(m[1]);
-      return t ? [200, { tree: [...t].map(([p, sha]) => ({ path: p, type: 'blob', sha })) }] : [404, { message: 'Not Found' }];
+      return t ? [200, { tree: [...t].map(([p, sha]) => ({ path: p, type: 'blob', sha, size: Buffer.byteLength(blobs.get(sha), 'utf8') })) }] : [404, { message: 'Not Found' }];
     }
     if (method === 'GET' && (m = /^\/git\/blobs\/(\w+)$/.exec(path))) {
       const text = blobs.get(m[1]);
@@ -74,9 +74,14 @@ export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true }
       head = body.sha;
       return [200, { object: { sha: head } }];
     }
+    // "Create a file": what starts an empty library, and what the Save to Recipes Shortcut calls.
     if (method === 'PUT' && (m = /^\/contents\/(.+)$/.exec(path))) {
+      if (!canWrite) return [403, { message: 'Resource not accessible by personal access token' }];
+      if (!body || typeof body.content !== 'string' || !body.message) return [422, { message: 'Invalid request.' }];
+      // Like GitHub, it refuses to replace a file unless the call names the version being replaced.
+      if (head && trees.get(commits.get(head).tree).has(m[1]) && !body.sha) return [422, { message: 'Invalid request.\n\n"sha" wasn\'t supplied.' }];
       write(m[1], Buffer.from(body.content, 'base64').toString('utf8'), body.message);
-      return [201, { commit: { sha: head } }];
+      return [201, { content: { name: m[1].split('/').pop(), path: m[1] }, commit: { sha: head } }];
     }
     return [404, { message: 'Not Found' }];
   }

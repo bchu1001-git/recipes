@@ -18,7 +18,7 @@ GENERATED="sw.js js/version.js"
 
 stamp() {
   local build="$1" list="'./'" f
-  while IFS= read -r f; do list="$list, '$f'"; done < <(find index.html manifest.webmanifest css js icons proofs -type f ! -name '.DS_Store' | LC_ALL=C sort)
+  while IFS= read -r f; do list="$list, '$f'"; done < <(find index.html manifest.webmanifest css js icons proofs shortcuts -type f ! -name '.DS_Store' | LC_ALL=C sort)
   {
     echo "// Generated from sw.template.js by scripts/publish.sh. Edit the template, not this file."
     awk -v build="$build" -v list="$list" '{ gsub(/__BUILD__/, build); gsub(/__FILES__/, list); print }' sw.template.js
