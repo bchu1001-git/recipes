@@ -82,12 +82,61 @@ If that Mac is already signed in to the personal GitHub account, publish without
 RECIPES_REMEMBER_LOGIN=1 scripts/publish.sh "What changed"
 ```
 
-## Part 3: later steps
+## Part 3: the library (about 20 minutes, once)
+
+A library is a private repository that holds the recipes. Two people who share one need a free
+organization that owns it, because a key cannot reach a repository its owner was only invited to.
+Someone with a library of their own can skip step 1 and create the repository in their own account.
+
+### 1. Create the organization
+
+1. On github.com, click your picture, then **Your organizations**, then **New organization**.
+2. Choose the **Free** plan.
+3. Give it a name nobody else has, enter a contact email, and say it belongs to your personal account.
+4. Skip inviting people for now.
+
+### 2. Let keys work without approval or an expiry date
+
+1. Open the organization, then **Settings**.
+2. In the left column, under **Personal access tokens**, open **Settings**.
+3. Allow fine-grained tokens, and choose **Do not require administrator approval**.
+4. If a maximum lifetime is set for fine-grained tokens, remove the limit, so that keys can be made
+   with no expiration.
+
+### 3. Create the library
+
+1. In the organization, **New repository**.
+2. Name: `library`. Visibility: **Private**. Everything else can stay as it is.
+3. Click **Create repository**. The app fills it in the first time a device connects.
+
+### 4. Make a key for each device
+
+Open this while signed in, with the organization's name in place of `YOUR-ORGANIZATION`:
+
+`https://github.com/settings/personal-access-tokens/new?name=Recipes+library&target_name=YOUR-ORGANIZATION&expires_in=none&contents=write`
+
+1. **Resource owner** must be the organization.
+2. **Repository access:** **Only select repositories**, then pick `library`.
+3. **Permissions:** **Contents** set to **Read and write**.
+4. **Generate token** and copy it.
+
+One key can serve all of one person's devices. A key per device lets you cancel a lost phone alone.
+
+### 5. Connect the app
+
+In Recipes: **Settings**, **Connect a library**. Enter `YOUR-ORGANIZATION/library`, paste the key, name
+the device, and tap **Connect**. Do the same on each device. The first one to connect sends its recipes
+up; the others receive them.
+
+### 6. Add the second person
+
+In the organization, **People**, then **Invite member**. Once they accept, they make their own key
+with the link in step 4 and connect the app the same way.
+
+## Part 4: later steps
 
 These will be written out in full when the parts they belong to are built:
 
-- Create the free organization and the library inside it, from the library template.
 - Add the AI key to the library as a secret.
-- Make a key for each device and paste it into the app.
 - Install the "Save to Recipes" and "Recipe Timer" Shortcuts.
-- Invite the second person, and set up the second library.
+- Set up a second, separate library for another household.

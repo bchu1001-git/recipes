@@ -7,6 +7,7 @@ import { renderHome, renderSide } from './ui/home.js';
 import { renderRecipe } from './ui/recipe.js';
 import { renderEditor } from './ui/editor.js';
 import { renderSettings, applyAppearance, appearance } from './ui/settings.js';
+import { startAutoSync } from './sync/auto.js';
 
 const app = document.getElementById('app');
 const side = document.getElementById('side');
@@ -51,6 +52,7 @@ async function start() {
   route();
   addEventListener('hashchange', route);
   if (!state.saved) toast('This browser is not saving data. Recipes will be gone when the tab closes.');
+  startAutoSync();
   registerWorker();
 }
 

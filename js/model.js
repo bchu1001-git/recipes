@@ -179,6 +179,8 @@ export function makeRecipe(input = {}, now = new Date().toISOString()) {
     by: input.by || '',
   };
   if (input.example) recipe.example = true;
+  // Fields written by a newer version of the app are carried along untouched.
+  for (const key of Object.keys(input)) if (!(key in recipe) && key !== 'example') recipe[key] = input[key];
   return recipe;
 }
 

@@ -1,7 +1,8 @@
 // Settings: appearance, folders, backup, and the example recipes.
 
 import { h, icon, sheet, confirmSheet, toast } from './dom.js';
-import { state, subscribe, saveFolders, removeFolder, saveRecipe, deleteRecipe, exportAll, importAll } from '../store.js';
+import { state, library, subscribe, saveFolders, removeFolder, saveRecipe, deleteRecipe, exportAll, importAll } from '../store.js';
+import { status, onStatus, syncNow, connect, disconnect, explain, ago } from '../sync/auto.js';
 import { newFolderId } from '../model.js';
 import { EXAMPLES } from '../sample.js';
 import { BUILD } from '../version.js';
@@ -90,6 +91,73 @@ function pickBackup() {
   input.click();
 }
 
+function guessDevice() {
+  const ua = navigator.userAgent;
+  if (/iPhone/.test(ua)) return 'iPhone';
+  if (/iPad/.test(ua)) return 'iPad';
+  if (/Mac/.test(ua)) return 'Mac';
+  return 'This device';
+}
+
+function openConnect() {
+  sheet('Connect a library', (close) => {
+    const field = (label, control, hint) => h('label', { class: 'field' },
+      h('span', { class: 'field-label', text: label }), control, h('span', { class: 'field-hint', text: hint }));
+    const repo = h('input', { class: 'input', placeholder: 'owner/library', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false' });
+    const key = h('input', { class: 'input', type: 'password', placeholder: 'github_pat_...', autocomplete: 'off' });
+    const device = h('input', { class: 'input', value: guessDevice(), autocomplete: 'off', maxlength: '40' });
+    const problem = h('p', { class: 'field-error', role: 'alert' });
+    const button = h('button', { class: 'btn btn-main', type: 'submit' }, 'Connect');
+    return h('form', { class: 'connect', novalidate: true, onsubmit: async (e) => {
+      e.preventDefault();
+      const name = repo.value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/$/, '');
+      const parts = /^([\w.-]+)\/([\w.-]+)$/.exec(name);
+      if (!parts) { problem.textContent = 'Write the library as owner/name, for example my-kitchen/library.'; repo.focus(); return; }
+      if (!key.value.trim()) { problem.textContent = 'Paste the key for this library.'; key.focus(); return; }
+      problem.textContent = '';
+      button.disabled = true;
+      button.textContent = 'Connecting...';
+      try {
+        const ok = await connect({ owner: parts[1], repo: parts[2], token: key.value, device: device.value });
+        close();
+        toast(ok ? 'Connected' : 'Connected, but the first sync did not finish');
+      } catch (err) {
+        problem.textContent = explain(err);
+        button.disabled = false;
+        button.textContent = 'Connect';
+      }
+    } },
+      field('Library', repo, 'The owner and name of the private repository on GitHub'),
+      field('Key', key, 'A fine-grained key for that repository, with Contents set to Read and write'),
+      field('This device', device, 'Shows in the library\u2019s history next to each change'),
+      problem, button);
+  });
+}
+
+function librarySection(count) {
+  if (!library.config) {
+    return h('section', { class: 'set' },
+      h('h2', { class: 'label', text: 'Library' }),
+      h('p', { class: 'set-note', text: 'Connect this device to your library on GitHub and your recipes stay the same on every device. Until then, ' +
+        (count === 0 ? 'anything you add lives' : count === 1 ? 'your recipe lives' : 'your ' + count + ' recipes live') + ' on this device only.' }),
+      h('button', { class: 'btn btn-main', type: 'button', onclick: openConnect }, 'Connect a library'));
+  }
+  const line = status.state === 'syncing' ? 'Syncing...'
+    : status.state === 'error' ? status.message
+    : status.at ? 'Synced ' + ago(status.at) : 'Not synced yet';
+  return h('section', { class: 'set' },
+    h('h2', { class: 'label', text: 'Library' }),
+    h('p', { class: 'set-library', text: library.config.owner + '/' + library.config.repo }),
+    h('p', { class: 'set-note', text: 'This device is \u201c' + library.config.device + '\u201d. The example recipes are never synced.' }),
+    h('p', { class: 'set-status' + (status.state === 'error' ? ' is-error' : ''), role: 'status', text: line }),
+    h('div', { class: 'set-buttons' },
+      h('button', { class: 'btn btn-quiet', type: 'button', disabled: status.state === 'syncing', onclick: () => syncNow() }, 'Sync now'),
+      h('button', { class: 'btn btn-quiet', type: 'button', onclick: async () => {
+        const yes = await confirmSheet('Disconnect this device?', 'Your recipes stay on this device and in the library. The key is forgotten here, so this device stops syncing.', 'Disconnect');
+        if (yes) { await disconnect(); toast('Disconnected'); }
+      } }, 'Disconnect')));
+}
+
 export function renderSettings(root) {
   const draw = () => {
     const scroller = root.querySelector('.pane-scroll');
@@ -120,10 +188,11 @@ export function renderSettings(root) {
               g.folders.map((f) => h('button', { class: 'chip', type: 'button', onclick: () => editFolder(g, f) }, f.name)),
               h('button', { class: 'chip chip-add', type: 'button', onclick: () => addFolder(g) }, icon('plus'), 'Add'))))),
 
+        librarySection(count),
+
         h('section', { class: 'set' },
-          h('h2', { class: 'label', text: 'Library' }),
-          h('p', { class: 'set-note', text: 'Syncing between devices is the next thing to be built. Until then, your ' +
-            (count === 1 ? 'recipe lives' : count + ' recipes live') + ' on this device only, so save a backup now and then.' }),
+          h('h2', { class: 'label', text: 'Backup' }),
+          h('p', { class: 'set-note', text: 'One file with every recipe and folder in it.' }),
           h('div', { class: 'set-buttons' },
             h('button', { class: 'btn btn-quiet', type: 'button', onclick: () => {
               download('recipes-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(exportAll(), null, 2));
@@ -151,6 +220,7 @@ export function renderSettings(root) {
     root.querySelector('.pane-scroll').scrollTop = keep;
   };
   const stop = subscribe(draw);
+  const stopStatus = onStatus(draw);
   draw();
-  return stop;
+  return () => { stop(); stopStatus(); };
 }

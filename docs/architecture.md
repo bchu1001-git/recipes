@@ -8,7 +8,7 @@ How the app is built today, and the plan for the parts that are not built yet. S
 | Piece | Where | State |
 | --- | --- | --- |
 | The app | This public repository, served by GitHub Pages | Built (core screens) |
-| A library | One private repository per library, holding recipes, photos and folders | Planned |
+| A library | One private repository per library, holding recipes, photos and folders | Built (recipes and folders) |
 | The importer | Code in this repository, run by a GitHub Action inside each library | Planned |
 | The AI reader | A free tier outside GitHub, called only by the importer, only for photos | Planned |
 | Shortcuts | "Save to Recipes" and "Recipe Timer", installed on each iPhone | Planned |
@@ -69,33 +69,52 @@ goes into a commit of its own, after your change, so two computers never clash o
 To try it locally anyway, open `http://localhost:8787/?sw`, and unregister it afterwards in the
 browser's developer tools.
 
-## Planned: a library
+## A library
 
 One private repository per library:
 
 ```
 recipes/       one JSON file per recipe
-photos/        one small photo per recipe
-originals/     the screenshots a recipe was read from
-inbox/         photos and pasted links waiting for the importer
-folders.json   groups and folders
+folders.json   groups and folders, with the time they last changed and the folders that were deleted
 deleted.json   ids of deleted recipes with the time, so a later sync does not bring them back
-.github/workflows/import.yml   a short file that calls the importer in the app's repository
+clashes/       a device's version of a recipe that lost to a newer one from another device
+README.md      written by the app when it starts an empty library
+photos/, originals/, inbox/, .github/workflows/import.yml    planned, for photos and the importer
 ```
 
 One file per recipe means two people changing different recipes never collide, and the repository's
-history holds every earlier version of each one.
+history holds every earlier version of each one. The app starts an empty repository itself, so a
+library needs no template.
 
-## Planned: syncing
+## Syncing
 
-- When: on opening the app, on leaving it, after an hour in the background, and on pull to refresh.
-- Reading: one call for the repository's file tree, then only the files whose hash changed.
-- Writing: all local changes go up as a single commit through the Git Data API (blobs, tree, commit,
-  move the branch). If the branch moved first, read again, merge and retry.
-- Merging: per recipe, the newer `updated` wins. A deletion and an edit compete the same way, using
-  the time in `deleted.json`. `store.js` already records deletions for this.
-- Each device stores its own fine-grained GitHub key in the browser. The key is limited to the one
-  library repository with Contents read and write.
+Code: `js/sync/`. `sync.js` and `merge.js` work on plain data, so the tests run them without a browser.
+
+- **When** (`auto.js`): when the app opens, eight seconds after the last change, when the app is left
+  with changes not yet sent, when it comes back after an hour or after a failed sync, when the list is
+  pulled down, and when the status next to the title is tapped.
+- **Reading:** one call for the newest commit, one for its file tree. Each file's hash is compared with
+  the hash the same content would have on this device; only files that differ are downloaded. A sync
+  with nothing to do costs three small requests and makes no commit.
+- **Merging** (`merge.js`): per recipe, the copy with the newer `updated` wins. A deletion and an edit
+  compete the same way, using the time in `deleted.json`, so editing a recipe after another device
+  deleted it brings it back. Folders are merged one by one; names and order come from the side that
+  changed its folders more recently.
+- **A real clash** is when both sides changed the same recipe since the last sync. The newer one wins
+  and the other device's version is written to `clashes/` so it is not lost. The app does not show
+  that folder yet.
+- **Writing:** everything GitHub lacks goes up as one commit through the Git Data API, named for the
+  device ("iPhone: 2 recipes changed"). If the branch moved in the meantime, the round starts over.
+- **Changes made during a sync** are left alone by `applySync()` in `store.js` and go up next time.
+- **The made-up example recipes are never synced.**
+- **The key** is a fine-grained GitHub token limited to the one library repository with Contents read
+  and write. It is stored in the browser's IndexedDB on that device only. Connecting refuses a
+  repository that is public or that the key cannot write to.
+- **Unknown fields** in a recipe file are kept, so an older version of the app does not strip what a
+  newer one wrote.
+
+`tests/fake-github.js` is a stand-in for the GitHub calls, kept in memory. The sync tests use it, and
+`scripts/dev-server.mjs` serves it next to the app for trying syncing in a browser.
 
 ## Planned: getting recipes in
 
@@ -124,3 +143,4 @@ recipient's "Save to Recipes" Shortcut can save it.
 | Can a Home Screen web app start a Clock timer through a Shortcut? | To test with `proofs/timer.html` |
 | Can a Shortcut read a recipe page and write into a library? | To test |
 | Does the free AI reader cope with the owner's own screenshots? | To test |
+| Does syncing work against real GitHub? | To test: so far it has only run against the stand-in |

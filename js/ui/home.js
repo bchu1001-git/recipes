@@ -2,7 +2,8 @@
 // On a wide window the same filters also appear as a sidebar.
 
 import { h, icon, sheet } from './dom.js';
-import { state, subscribe, saveRecipe } from '../store.js';
+import { state, library, subscribe, saveRecipe } from '../store.js';
+import { status, onStatus, syncNow, ago } from '../sync/auto.js';
 import { ui, onUi, setUi, toggleFilter, clearFilters } from './state.js';
 import { matchesQuery, matchesFilters, sortRecipes, initials, hueFor, formatMinutes } from '../model.js';
 import { EXAMPLES } from '../sample.js';
@@ -72,21 +73,56 @@ async function addExamples() {
   for (const ex of EXAMPLES) if (!state.recipes.has(ex.id)) await saveRecipe(ex);
 }
 
+/** Pulling the list down from its top syncs, when a library is connected. */
+function pullToSync(scroller, hint) {
+  let from = null;
+  let pulled = 0;
+  const rest = () => { hint.style.height = '0px'; from = null; pulled = 0; };
+  scroller.addEventListener('touchstart', (e) => {
+    from = library.config && scroller.scrollTop <= 0 ? e.touches[0].clientY : null;
+    pulled = 0;
+  }, { passive: true });
+  scroller.addEventListener('touchmove', (e) => {
+    if (from === null) return;
+    pulled = e.touches[0].clientY - from;
+    if (pulled <= 0 || scroller.scrollTop > 0) { hint.style.height = '0px'; return; }
+    hint.style.height = Math.min(pulled / 2, 52) + 'px';
+    hint.textContent = pulled > 110 ? 'Let go to sync' : 'Pull to sync';
+  }, { passive: true });
+  scroller.addEventListener('touchend', () => { if (from !== null && pulled > 110) syncNow(); rest(); });
+  scroller.addEventListener('touchcancel', rest);
+}
+
 export function renderHome(root) {
   const search = h('input', { class: 'search', type: 'search', 'aria-label': 'Search recipes', autocomplete: 'off',
     oninput: (e) => setUi({ query: e.target.value }) });
   const chips = h('div', { class: 'chips scroll-x' });
   const rows = h('div', { class: 'rows' });
+  const sync = h('button', { class: 'sync-chip', type: 'button', onclick: () => {
+    if (status.state === 'error') location.hash = '#/settings';
+    else syncNow();
+  } });
+  const hint = h('div', { class: 'pull', 'aria-hidden': 'true' });
+  const scroller = h('div', { class: 'pane-scroll' });
+  const drawSync = () => {
+    sync.hidden = status.state === 'off';
+    sync.classList.toggle('is-error', status.state === 'error');
+    sync.textContent = status.state === 'syncing' ? 'Syncing...'
+      : status.state === 'error' ? 'Sync problem'
+      : status.at ? 'Synced ' + ago(status.at) : 'Not synced yet';
+  };
 
-  root.replaceChildren(
-    h('div', { class: 'pane-scroll' },
+  scroller.append(
+      hint,
       h('header', { class: 'bar' },
         h('h1', { class: 'bar-title', text: 'Recipes' }),
+        sync,
         h('a', { class: 'icon-btn', href: '#/settings', 'aria-label': 'Settings' }, icon('sliders'))),
       h('div', { class: 'search-wrap' }, icon('search'), search),
       chips,
-      rows),
-    h('a', { class: 'fab', href: '#/new', 'aria-label': 'Add a recipe' }, icon('plus')));
+      rows);
+  root.replaceChildren(scroller, h('a', { class: 'fab', href: '#/new', 'aria-label': 'Add a recipe' }, icon('plus')));
+  pullToSync(scroller, hint);
 
   const draw = () => {
     const total = state.recipes.size;
@@ -124,7 +160,10 @@ export function renderHome(root) {
 
   subscribe(draw);
   onUi(draw);
+  onStatus(drawSync);
+  setInterval(drawSync, 60000);   // keeps "5 min ago" honest
   draw();
+  drawSync();
 }
 
 /** The sidebar on a wide window: the same folders, always visible. */

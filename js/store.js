@@ -1,29 +1,36 @@
 // The library as this device knows it: recipes and folders in memory, saved to IndexedDB.
-// Syncing with GitHub will build on this file; nothing here talks to the network.
+// Nothing here talks to the network; js/sync/ does that and hands its result to applySync().
 
 import { starterFolders, makeRecipe } from './model.js';
 
 const DB_NAME = 'recipes-app';
 const DB_VERSION = 1;
+const EPOCH = '2000-01-01T00:00:00.000Z';
 
 export const state = {
   recipes: new Map(),
-  folders: starterFolders(),
+  folders: { ...starterFolders(), updated: EPOCH, deleted: {} },
   deleted: {},        // recipe id -> when it was deleted, so a later sync doesn't bring it back
   saved: true,        // false when this browser can't store data (for example a private window)
+};
+
+/** Which library this device syncs with, and what it looked like at the last sync. */
+export const library = {
+  config: null,       // { owner, repo, token, device, branch } or null when not connected
+  base: {},           // { head, files: { path: hash } }
 };
 
 let db = null;
 const listeners = new Set();
 
-/** Calls `fn` after every change to recipes or folders. Returns a function that stops the calls. */
+/** Calls `fn(why)` after every change. `why` is 'edit' for something done here, 'sync' for something received. */
 export function subscribe(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-function changed() {
-  for (const fn of [...listeners]) fn();
+function changed(why = 'edit') {
+  for (const fn of [...listeners]) fn(why);
 }
 
 function open() {
@@ -51,16 +58,22 @@ function run(storeName, mode, work) {
   });
 }
 
+const getMeta = (key) => run('meta', 'readonly', (s) => s.get(key));
+const putMeta = (key, value) => run('meta', 'readwrite', (s) => s.put(value, key));
+
 /** Loads everything saved on this device. Safe to call once at start. */
 export async function init() {
   try {
     db = await open();
     const all = await run('recipes', 'readonly', (s) => s.getAll());
     for (const r of all || []) state.recipes.set(r.id, r);
-    const folders = await run('meta', 'readonly', (s) => s.get('folders'));
-    if (folders && Array.isArray(folders.groups)) state.folders = folders;
-    const deleted = await run('meta', 'readonly', (s) => s.get('deleted'));
+    const folders = await getMeta('folders');
+    if (folders && Array.isArray(folders.groups)) state.folders = { updated: EPOCH, deleted: {}, ...folders };
+    const deleted = await getMeta('deleted');
     if (deleted) state.deleted = deleted;
+    const config = await getMeta('library');
+    if (config && config.owner && config.repo && config.token) library.config = config;
+    library.base = (await getMeta('base')) || {};
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   } catch (err) {
     db = null;
@@ -70,7 +83,7 @@ export async function init() {
 
 /** Saves a new or changed recipe and stamps it with the current time. */
 export async function saveRecipe(input) {
-  const recipe = makeRecipe(input);
+  const recipe = makeRecipe({ ...input, by: (library.config && library.config.device) || input.by || '' });
   state.recipes.set(recipe.id, recipe);
   delete state.deleted[recipe.id];
   changed();
@@ -84,27 +97,31 @@ export async function deleteRecipe(id) {
   state.deleted[id] = new Date().toISOString();
   changed();
   await run('recipes', 'readwrite', (s) => s.delete(id));
-  await run('meta', 'readwrite', (s) => s.put(state.deleted, 'deleted'));
+  await putMeta('deleted', state.deleted);
 }
 
+/** Saves the groups and folders. A folder that is present is no longer counted as deleted. */
 export async function saveFolders(folders) {
-  state.folders = folders;
+  const present = new Set(folders.groups.flatMap((g) => g.folders.map((f) => f.id)));
+  const deleted = {};
+  for (const [id, at] of Object.entries(folders.deleted || state.folders.deleted || {})) if (!present.has(id)) deleted[id] = at;
+  state.folders = { groups: folders.groups, updated: new Date().toISOString(), deleted };
   changed();
-  await run('meta', 'readwrite', (s) => s.put(folders, 'folders'));
+  await putMeta('folders', state.folders);
 }
 
 /** Removes a folder everywhere: from its group and from every recipe filed in it. */
 export async function removeFolder(folderId) {
-  const folders = {
-    groups: state.folders.groups.map((g) => ({ ...g, folders: g.folders.filter((f) => f.id !== folderId) })),
-  };
   const touched = [...state.recipes.values()].filter((r) => r.folders.includes(folderId));
   for (const r of touched) {
     const next = makeRecipe({ ...r, folders: r.folders.filter((f) => f !== folderId) });
     state.recipes.set(next.id, next);
     await run('recipes', 'readwrite', (s) => s.put(next));
   }
-  await saveFolders(folders);
+  await saveFolders({
+    groups: state.folders.groups.map((g) => ({ ...g, folders: g.folders.filter((f) => f.id !== folderId) })),
+    deleted: { ...state.folders.deleted, [folderId]: new Date().toISOString() },
+  });
 }
 
 /** Everything in one object, for a backup file. */
@@ -132,14 +149,82 @@ export async function importAll(data) {
     added++;
   }
   if (data.folders && Array.isArray(data.folders.groups)) {
-    const folders = { groups: state.folders.groups.map((g) => ({ ...g, folders: [...g.folders] })) };
+    const groups = state.folders.groups.map((g) => ({ ...g, folders: [...g.folders] }));
     for (const theirs of data.folders.groups) {
-      let mine = folders.groups.find((g) => g.id === theirs.id);
-      if (!mine) { mine = { id: theirs.id, name: theirs.name, folders: [] }; folders.groups.push(mine); }
+      let mine = groups.find((g) => g.id === theirs.id);
+      if (!mine) { mine = { id: theirs.id, name: theirs.name, folders: [] }; groups.push(mine); }
       for (const f of theirs.folders || []) if (!mine.folders.some((x) => x.id === f.id)) mine.folders.push(f);
     }
-    await saveFolders(folders);
+    await saveFolders({ groups });
   }
   changed();
   return added;
+}
+
+// ---------- syncing ----------
+
+export async function saveLibrary(config) {
+  library.config = config;
+  library.base = {};
+  await putMeta('library', config);
+  await putMeta('base', {});
+  changed('sync');
+}
+
+export async function forgetLibrary() {
+  library.config = null;
+  library.base = {};
+  await run('meta', 'readwrite', (s) => { s.delete('library'); s.delete('base'); });
+  changed('sync');
+}
+
+export async function saveBase(base) {
+  library.base = base;
+  await putMeta('base', base);
+}
+
+/** What goes into a sync, plus enough to notice anything that changes here while the sync is running. */
+export function snapshot() {
+  const recipes = [...state.recipes.values()];
+  return {
+    recipes,
+    folders: state.folders,
+    deleted: { ...state.deleted },
+    seen: new Map(recipes.map((r) => [r.id, r.updated])),
+    foldersAt: state.folders.updated,
+  };
+}
+
+/**
+ * Takes the merged library from a sync. Anything that was changed on this device while the sync was
+ * running is left alone; it goes up with the next sync.
+ */
+export async function applySync(result, snap) {
+  const merged = new Map(result.recipes.map((r) => [r.id, r]));
+  const puts = [];
+  const drops = [];
+
+  for (const [id, recipe] of merged) {
+    const now = state.recipes.get(id);
+    if (now ? now.updated !== snap.seen.get(id) : (id in state.deleted && !(id in snap.deleted))) continue;   // edited or deleted meanwhile
+    if (now === recipe) continue;
+    state.recipes.set(id, recipe);
+    puts.push(recipe);
+  }
+  for (const [id, now] of state.recipes) {
+    if (now.example || merged.has(id)) continue;
+    if (!snap.seen.has(id) || now.updated !== snap.seen.get(id)) continue;   // added or edited meanwhile
+    state.recipes.delete(id);
+    drops.push(id);
+  }
+
+  const deleted = { ...result.deleted };
+  for (const [id, at] of Object.entries(state.deleted)) if (!(id in snap.deleted)) deleted[id] = at;   // deleted meanwhile
+  state.deleted = deleted;
+  if (state.folders.updated === snap.foldersAt) state.folders = { updated: EPOCH, deleted: {}, ...result.folders };
+
+  changed('sync');
+  await run('recipes', 'readwrite', (s) => { for (const r of puts) s.put(r); for (const id of drops) s.delete(id); });
+  await putMeta('deleted', state.deleted);
+  await putMeta('folders', state.folders);
 }
