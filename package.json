@@ -1,0 +1,9 @@
+{
+  "name": "recipes",
+  "private": true,
+  "type": "module",
+  "description": "A personal recipe app that runs from GitHub Pages. No dependencies and no build step.",
+  "scripts": {
+    "test": "node --test tests/*.test.js"
+  }
+}

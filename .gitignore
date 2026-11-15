@@ -1,0 +1,5 @@
+# Never publish these: the AI key, the personal sample screenshots, and editor leftovers.
+.env
+samples/
+.DS_Store
+.claude/settings.local.json

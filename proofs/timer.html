@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Clock timer test</title>
+  <style>
+    :root { --bg: #ffffff; --ink: #17201b; --ink2: #56615b; --line: #e3e8e5; --acc: #1f8f4e; --onacc: #ffffff; --soft: #e7f4ea; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #121614; --ink: #edf1ee; --ink2: #a9b3ad; --line: #2b3430; --acc: #4fbf7f; --onacc: #08130c; --soft: #143122; } }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 400 17px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+    main { max-width: 36rem; margin: 0 auto; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(32px + env(safe-area-inset-bottom, 0px)); }
+    a { color: var(--acc); }
+    h1 { font-size: 28px; line-height: 1.15; margin: 12px 0 8px; }
+    h2 { font-size: 19px; margin: 28px 0 8px; }
+    p, li { color: var(--ink2); }
+    li { margin: 6px 0; }
+    b { color: var(--ink); }
+    .btn { display: block; text-align: center; text-decoration: none; background: var(--acc); color: var(--onacc); font-weight: 700; border-radius: 12px; padding: 13px 16px; margin: 10px 0; }
+    .btn.second { background: var(--soft); color: var(--acc); }
+    .note { border-top: 1px solid var(--line); margin-top: 28px; padding-top: 14px; font-size: 15px; }
+  </style>
+</head>
+<body>
+  <main>
+    <a href="../">&lsaquo; Back to Recipes</a>
+    <h1>Clock timer test</h1>
+    <p>This checks whether Recipes can hand a timer to the iPhone&rsquo;s Clock app, so it rings even when the phone is locked. It needs a small Shortcut that you make once.</p>
+
+    <h2>1. Make the Shortcut</h2>
+    <ol>
+      <li>Open the <b>Shortcuts</b> app and tap <b>+</b> to start a new shortcut.</li>
+      <li>Tap its name at the top, choose <b>Rename</b>, and call it exactly <b>Recipe Timer</b>.</li>
+      <li>Search the actions for <b>Start Timer</b> and add it.</li>
+      <li>In that action, tap the number. From the row above the keyboard, choose <b>Shortcut Input</b>. Leave the unit on <b>minutes</b>.</li>
+      <li>Tap <b>Done</b>.</li>
+    </ol>
+
+    <h2>2. Try it</h2>
+    <p>Open this page from the <b>Recipes icon on your Home Screen</b> (Settings, then Try the Clock timer). Opening it in Safari tests the wrong thing.</p>
+    <a class="btn" href="shortcuts://run-shortcut?name=Recipe%20Timer&amp;input=text&amp;text=1">Start a 1 minute timer</a>
+    <a class="btn second" id="back" href="shortcuts://run-shortcut?name=Recipe%20Timer&amp;input=text&amp;text=1">Start one, then try to come back here</a>
+
+    <h2>3. What to tell me</h2>
+    <ul>
+      <li>Did a 1 minute timer appear in Clock, and did it ring?</li>
+      <li>How did you get back to Recipes: an arrow at the top left of the screen, on its own, or only by swiping?</li>
+      <li>With the second button, did it return here, open Safari, or do nothing?</li>
+      <li>Did it still ring with the phone locked?</li>
+    </ul>
+    <p class="note">If any step looks different on your phone, say what you see instead. The names of things in Shortcuts change between iOS versions.</p>
+  </main>
+  <script>
+    // The second button asks Shortcuts to open this page again when the timer has started.
+    document.getElementById('back').href =
+      'shortcuts://x-callback-url/run-shortcut?name=Recipe%20Timer&input=text&text=1&x-success=' + encodeURIComponent(location.href);
+  </script>
+</body>
+</html>

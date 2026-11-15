@@ -1,0 +1,70 @@
+// Three made-up recipes for trying the app out. They are marked as examples and can be removed in Settings.
+
+export const EXAMPLES = [
+  {
+    id: 'example-chicken-noodle-soup',
+    example: true,
+    title: 'Chicken noodle soup',
+    source: { kind: 'manual', name: 'Example' },
+    minutes: 45,
+    serves: '6',
+    ingredients: [
+      '1 tbsp olive oil', '1 onion, diced', '2 carrots, sliced', '2 celery stalks, sliced', '8 cups chicken broth',
+      '1 lb chicken thighs', '6 oz egg noodles', '2 tbsp fresh dill', 'Salt and pepper, to taste',
+    ],
+    steps: [
+      'Warm the oil in a large pot. Add the onion, carrots and celery and cook until soft, about 5 minutes.',
+      'Pour in the broth and add the chicken. Bring to a boil, then simmer for 20 minutes.',
+      'Lift out the chicken and shred it with two forks.',
+      'Return the chicken to the pot with the noodles. Cook until tender, about 6 minutes.',
+      'Stir in the dill, season with salt and pepper, and serve.',
+    ],
+    notes: { mine: 'Double the noodles. Dill at the end.', source: 'Thighs stay juicier than breasts. Keeps four days in the fridge.' },
+    folders: ['ingredient:chicken', 'dish:soups-stews', 'meal:dinner'],
+    goto: true,
+    rating: 5,
+  },
+  {
+    id: 'example-homemade-ranch',
+    example: true,
+    title: 'Homemade ranch',
+    source: { kind: 'manual', name: 'Example' },
+    minutes: 10,
+    serves: '8',
+    ingredients: [
+      '1/2 cup mayonnaise', '1/2 cup sour cream', '1/4 cup buttermilk', '1 tbsp fresh chives, chopped',
+      '1 tbsp fresh parsley, chopped', '1 tsp dried dill', '1 clove garlic, grated', '1 tsp lemon juice', 'Salt and pepper, to taste',
+    ],
+    steps: [
+      'Whisk the mayonnaise, sour cream and buttermilk until smooth.',
+      'Stir in the herbs, garlic and lemon juice. Season with salt and pepper.',
+      'Chill for 30 minutes before serving.',
+    ],
+    notes: { mine: '', source: 'Thin it with more buttermilk for a dressing, or leave it thick for a dip.' },
+    folders: ['dish:sauces-dressings', 'lists:quick'],
+    goto: true,
+    rating: 4,
+  },
+  {
+    id: 'example-banana-bread',
+    example: true,
+    title: 'Banana bread',
+    source: { kind: 'manual', name: 'Example' },
+    minutes: 70,
+    serves: '10',
+    ingredients: [
+      '3 ripe bananas, mashed', '1/3 cup melted butter', '3/4 cup sugar', '1 egg, beaten', '1 tsp vanilla',
+      '1 tsp baking soda', 'a pinch of salt', '1 1/2 cups flour',
+    ],
+    steps: [
+      'Heat the oven to 350 degrees and butter a loaf pan.',
+      'Stir the butter into the mashed bananas, then mix in the sugar, egg and vanilla.',
+      'Sprinkle the baking soda and salt over the batter and stir. Fold in the flour.',
+      'Pour into the pan and bake for 55 to 60 minutes, until a skewer comes out clean.',
+    ],
+    notes: { mine: 'Use the big loaf pan.', source: '' },
+    folders: ['dish:baking-desserts', 'meal:snacks'],
+    goto: false,
+    rating: 5,
+  },
+];
