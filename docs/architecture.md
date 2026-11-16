@@ -11,7 +11,7 @@ How the app is built today, and the plan for the parts that are not built yet. S
 | A library | One private repository per library, holding recipes, the pictures they were read from, and folders | Built (recipes, folders, the inbox and originals) |
 | The importer | Code in this repository (`importer/`), run by a GitHub Action inside each library | Built for pictures and run on a computer. Its run inside a library on GitHub is still to be proven. Pasted links are planned |
 | The AI reader | A free tier outside GitHub, called only by the importer, only for pictures | Built: Google's Gemini, tried with a real key on made-up pictures. Still to be tried on the owner's own |
-| Shortcuts | "Save to Recipes" and "Recipe Timer", made on each iPhone | Save to Recipes: built, and made and run on an iPhone. Recipe Timer: planned |
+| Shortcuts | "Save to Recipes", "Send to Recipes" and "Recipe Timer", made on each iPhone | Save to Recipes: built, and made and run on an iPhone. Send to Recipes: its steps and the library's side are built; nobody has made the Shortcut yet. Recipe Timer: planned |
 
 Nothing runs on a server owned by this project. A device talks to GitHub Pages for the app's files
 and to `api.github.com` for its library. The page's Content Security Policy in
@@ -292,6 +292,61 @@ typed there always wins over whatever the reader makes of the pictures.
 and becomes the recipe's `source.kind`. The id is twelve random letters and digits made on the device.
 The recipe a job becomes is always `rp<id>`, so neither the app nor the importer can make it twice.
 
+A picture file may end in `.png` as well as `.jpg`, and a job may name up to ten (`MAX_JOB_PICTURES`),
+though the app's own screen sends six at most and always JPEG. What a picture file really holds is
+told from its first bytes wherever that matters (the importer, and the app when it shows one), never
+from its name.
+
+**A job shared whole** (`importer/unpack.mjs`). A Shortcut cannot make several files in one go, so
+the "Send to Recipes" Shortcut sends one, `inbox/job-<number>.json`, with the pictures inside it as
+base64. It sends the plainest form there is, one picture to a line and no JSON around them, so that
+nothing in the Shortcut has to be put together by hand:
+
+```
+<base64 of a picture>
+<base64 of the next>
+```
+
+Anything else that wants to send pictures in one file should use the tidier form, which is read by
+the same code:
+
+```
+{ "job": "photos", "pictures": ["<base64>", "<base64>"] }
+```
+
+Nothing else is needed in either: the id is the number in the file's name. The pictures are found by
+what they are, not by where they sit: any run of base64 that begins the way a JPEG or a PNG begins.
+So both forms work, and so does a file with line breaks inside the base64 (Shortcuts adds them
+unless told not to), pictures joined by anything at all, JSON that is not quite right, and PNG in
+place of JPEG. Whatever is not a picture is passed over, and no more than ten are kept.
+
+The importer's first step with a job file that is not an ordinary job is to decide whose it is
+(`isShared` in `js/jobs.js`). Two things are somebody else's and never touched: a job that names
+picture files, and a job that says it is of another kind. Everything else under a job file's name
+came from a Shortcut. If pictures are found in it, they are written out as `inbox/job-<id>/1.jpg`
+and so on and the file becomes the small ordinary job file above. From there it is a job like any
+other, so a reading that fails leaves something the app already knows how to show, try again and
+discard. If no picture is found, the file becomes a failed job that says so (the only kind of job
+with no pictures), so nothing a Shortcut sent ever sits in the library unexplained.
+
+A note shared from the Notes app arrives as its pictures plus one more: a picture of the note as a
+page, with the note's name at the top, anything typed in it, and copies of the pictures. A job that
+was unpacked from a shared file is marked `shared: true`, and for those jobs only the reader's
+instruction gains a paragraph about that page (`NOTE_PAGE` in `gemini.mjs`): its first line is the
+recipe's title, typed lines go to the notes, and the copies are not a second recipe. Pictures sent
+from the app's own screen are read with the instruction exactly as it was.
+
+The app never downloads such a file when it is large, and one with pictures in it is several
+megabytes. `sync.js` tells it by its size in the file tree (`LARGE_JOB_FILE`) and shows a plain
+"Reading pictures sent from another app..." line with Discard, knowing nothing else about it. A small
+one is fetched once to see what it is, and shown the same way if `isShared` says it is one of these. While one is waiting the app looks again every 20
+seconds for five minutes, as it does for pictures it sent itself. The library's workflow needs no
+change for any of this: it already starts on `inbox/job-*`.
+
+Each shared note leaves its file in the library's history, about two megabytes, beside the pictures
+kept in `originals/`. A recipe collection stays far below what a repository may hold, but it is the
+heavier of the two ways of sending pictures.
+
 **In the app.** The + button offers "From photos or screenshots" (`js/ui/photos.js`). Pictures come
 in three ways: chosen with the browser's own picker (on an iPhone that offers the photo library, the
 camera and the files), pasted (a Paste button that asks the browser for the clipboard, and the
@@ -330,11 +385,13 @@ commit is put on top of that and pushed again. The rules it keeps:
 - Nothing is invented. What the pictures did not show stays empty, and the answer is treated as
   untrusted text: it goes through the same cleaning as a saved web page and is capped in size.
 - A file in `inbox/` that is not a picture job it understands is left exactly as it is.
+- All of a job's pictures go to the reader in one request, which Google limits to 20 MB. Pictures
+  that come to more than 13 MB together fail the job with a reason, before the reader is asked.
 
 **The reader** (`importer/readers/`). A reader is a module with a `name` and one function:
 
 ```
-read({ pictures: [{ data, type }], kind, key })
+read({ pictures: [{ data, type }], kind, key, shared })
   -> { title, ingredients: [line], steps: [line], notes, time, serves, source, unsure: [line] }
 ```
 
@@ -417,5 +474,6 @@ recipient's "Save to Recipes" Shortcut can save it.
 | Can a Shortcut read a recipe page and write into a library? | Proven November 2026 on an iPhone with iOS 27: a page shared from Safari arrived under To review. Format Date could not be set up on that phone, so the file is named with a random number, and Show Result is called Show Content there. The page script was also run in a desktop browser on saved copies of ten live recipe pages, with their styles and without their own scripts: the three that group their ingredients gave the right groups, and the seven that do not gave none |
 | Does the web-page reader cope with real recipe pages? | Tested November 2026 on saved copies of one recipe page from each of 23 sites: 22 gave a full recipe; 1 had only the older in-page markup and gave a title and link |
 | Does the free AI reader cope with the owner's own screenshots? | Tried November 2026 on the owner's own samples, five screenshots of two recipes, on a computer: both came back with every ingredient, step, group and note in place, in two to five seconds, and the same whatever order the pictures were given in. One recipe's name was not in its pictures, and its title was suggested from the names of its two groups. Still to be tried from the owner's phone. The larger Gemini models took minutes on the same pictures, or timed out, so the small one is used. Also tried with a real key on six made-up pictures, sent through the app and the importer on a computer: a recipe-site screenshot, a social media caption, a photographed cookbook page with two groups of ingredients, a recipe over two overlapping screenshots, and a page with no recipe. Each recipe came back complete in two to three seconds, with nothing added, the groups as headings, and the overlap read once; the page with no recipe became a failed job. A half written as one character sometimes came back as 1/2. A seventh picture, a recipe card with a stain over one amount, two steps running off its edge and one blurred step, came back with the cut-off words left cut off and those four lines named as unsure |
+| Can a Shortcut send a note's pictures to a library in one go? | Half proven. November 2026, on an iPhone with iOS 27: a share-sheet Shortcut given a note (Share, Send Copy) receives its pictures, and one more, Notes' own PDF copy of the note as a picture. The file such a Shortcut would send (one picture's base64 to a line, no JSON) was built on a computer from four of the owner's screenshots and a made-up note page, and went through the real importer and reader: the title came from the note page, with every ingredient, step and group and the typed line. The JSON form, with line breaks left in the base64 and the pictures as PNG, gave the same. Still to test: the "Send to Recipes" Shortcut itself, with the steps in Settings, Send from other apps, and whether GitHub takes an upload of a few megabytes from it |
 | Does the importer run inside a library on GitHub? | To test, with the steps in Settings, Read photos. The workflow file has been checked as text only: nobody has run it |
 | Does syncing work against real GitHub? | Proven November 2026: an iPhone connected to an empty private library and synced |

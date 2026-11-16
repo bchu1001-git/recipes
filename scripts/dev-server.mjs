@@ -55,10 +55,10 @@ async function runImporter(real, fail, untitled) {
       const env = await readFile(join(root, '.env'), 'utf8').catch(() => '');
       key = (/^\s*GEMINI_API_KEY\s*=\s*(.*?)\s*$/m.exec(env) || [])[1] || '';
     }
-    const out = await processJobs(dir, { read: async ({ pictures, kind }) => {
+    const out = await processJobs(dir, { read: async ({ pictures, kind, shared }) => {
       if (fail) throw new JobError(fail);
       if (real && !key) throw new JobError('The library has no key for the AI service.');
-      const reading = await reader.read({ pictures, kind, key });
+      const reading = await reader.read({ pictures, kind, key, shared });
       return untitled ? { ...reading, title: '', titleSuggested: false } : reading;
     } });
     if (out.read.length || out.failed.length || out.cleared.length) hub.replaceAll(await everyFile(dir), summary(out));

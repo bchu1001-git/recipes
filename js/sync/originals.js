@@ -20,7 +20,7 @@ async function kept(sha) {
 
 async function keep(sha, blob) {
   try {
-    await (await caches.open(CACHE)).put(address(sha), new Response(blob, { headers: { 'Content-Type': 'image/jpeg' } }));
+    await (await caches.open(CACHE)).put(address(sha), new Response(blob, { headers: { 'Content-Type': blob.type || 'image/jpeg' } }));
   } catch (err) { /* nowhere to keep it */ }
 }
 
@@ -32,7 +32,10 @@ export async function loadOriginal(path) {
   if (hit) return hit;
   const client = currentClient();
   if (!client) throw new Error('No library is connected.');
-  const blob = new Blob([await client.blobBytes(sha)], { type: 'image/jpeg' });
+  const bytes = await client.blobBytes(sha);
+  // Pictures shared by a Shortcut may be PNG. What a file is, is told from its first bytes, not its name.
+  const png = bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  const blob = new Blob([bytes], { type: png ? 'image/png' : 'image/jpeg' });
   keep(sha, blob);
   return blob;
 }

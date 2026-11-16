@@ -193,6 +193,14 @@ report.
 
 A second library, such as another household's, repeats those three steps with a key of its own.
 
+**The "Send to Recipes" Shortcut.** For recipes kept as pictures in another app, such as screenshots
+in a note: this Shortcut sits in the share sheet and sends a note's pictures straight to the library
+to be read, with no trip through the photo library. It relies on reading photos being set up first.
+Its steps are inside the app, with your library's own address filled in: open Recipes, then
+**Settings**, **Send from other apps**, **Set up Send to Recipes**. It is made by hand on each iPhone
+and can share the key of the Save to Recipes Shortcut. The steps are a first try that still has to
+be proven on a phone; the screen lists what to report.
+
 To try the reader on a computer first, see "Run the tests" in the README.
 
 These will be written out in full when the parts they belong to are built:

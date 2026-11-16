@@ -27,11 +27,11 @@ async function main() {
   const reader = await import(READERS[which]);
   const key = process.env.GEMINI_API_KEY || '';
 
-  const read = async ({ pictures, kind }) => {
+  const read = async ({ pictures, kind, shared }) => {
     if (which === 'gemini' && !key) {
       throw new JobError('The library has no key for the AI service. Add it as a secret named GEMINI_API_KEY: Settings, Read photos, in the app.');
     }
-    return reader.read({ pictures, kind, key });
+    return reader.read({ pictures, kind, key, shared });
   };
 
   const out = await processJobs(dir, { read });

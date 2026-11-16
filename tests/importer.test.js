@@ -5,13 +5,14 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir, devNull } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { makeJob, serializeJob, failedJob, jobPath, picturePath, jobRecipeId } from '../js/jobs.js';
+import { makeJob, serializeJob, failedJob, retriedJob, readJob, jobPath, picturePath, jobRecipeId } from '../js/jobs.js';
 import { makeRecipe } from '../js/model.js';
 import { serializeRecipe } from '../js/sync/merge.js';
 import { processJobs, summary, JobError } from '../importer/jobs.mjs';
 import { recipeFromReading } from '../importer/reading.mjs';
 import { commitAndPush } from '../importer/git.mjs';
 import * as gemini from '../importer/readers/gemini.mjs';
+import { picturesIn, typeOf, dataIn } from '../importer/unpack.mjs';
 
 // The git these tests run must not pick up this computer's own settings (signing, hooks, a default branch).
 process.env.GIT_CONFIG_GLOBAL = devNull;
@@ -319,21 +320,25 @@ test('importer: a job whose recipe was deleted since is not made again', async (
   await rm(dir, { recursive: true, force: true });
 });
 
-test('importer: files it does not understand are left exactly as they are', async () => {
+test('importer: files that belong to something else are left exactly as they are', async () => {
   const dir = await library();
   const capture = '{"v":1,"url":"https://kitchen.example/soup","title":"Soup","ld":[]}';
-  await writeFile(join(dir, 'inbox', '482915.json'), capture);                                        // a page saved from Safari: the app's business
-  await writeFile(join(dir, 'inbox', 'job-link00000001.json'), '{"v":1,"job":"link","id":"link00000001","url":"https://kitchen.example/soup"}');   // a kind of job from the future
-  await writeFile(join(dir, 'inbox', 'job-broken000001.json'), 'not json');
+  const link = '{"v":1,"job":"link","id":"link00000001","url":"https://kitchen.example/soup"}';
+  const odd = JSON.stringify({ v: 1, job: 'photos', id: 'odd000000001', images: ['recipes/r1.json'] });
+  await writeFile(join(dir, 'inbox', '482915.json'), capture);                    // a page saved from Safari: the app's business
+  await writeFile(join(dir, 'inbox', 'job-link00000001.json'), link);             // a kind of job from the future
+  await writeFile(join(dir, 'inbox', 'job-odd000000001.json'), odd);              // names files, but not as this version does
   await writeFile(join(dir, 'inbox', 'notes.txt'), 'hello');
   let asked = 0;
   const out = await processJobs(dir, options(async () => { asked++; return READING; }));
   assert.equal(asked, 0);
   assert.deepEqual(out.read, []);
   assert.deepEqual(out.failed, []);
-  assert.deepEqual(out.left, ['inbox/job-broken000001.json', 'inbox/job-link00000001.json']);
+  assert.deepEqual(out.left, ['inbox/job-link00000001.json', 'inbox/job-odd000000001.json']);
   assert.equal(await readFile(join(dir, 'inbox', '482915.json'), 'utf8'), capture);
-  assert.equal(await readFile(join(dir, 'inbox', 'job-broken000001.json'), 'utf8'), 'not json');
+  assert.equal(await readFile(join(dir, 'inbox', 'job-link00000001.json'), 'utf8'), link);
+  assert.equal(await readFile(join(dir, 'inbox', 'job-odd000000001.json'), 'utf8'), odd);
+  assert.equal(await readFile(join(dir, 'inbox', 'notes.txt'), 'utf8'), 'hello');
   assert.equal(summary(out), 'Importer: nothing to do');
   await rm(dir, { recursive: true, force: true });
 });
@@ -553,4 +558,273 @@ test('run: with no key in the library, the job says so instead of being read', a
   const job = await json(join(importer, jobPath('abc123def456')));
   assert.match(job.error, /no key for the AI service.*GEMINI_API_KEY/);
   await rm(root, { recursive: true, force: true });
+});
+
+// ---------- a job file shared whole by a Shortcut, with its pictures inside it ----------
+
+// Made-up pictures: the right first bytes, something in the middle, and the right last bytes.
+const jpeg = (n, size = 200) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(size, n), Buffer.from([0xff, 0xd9])]);
+const png = (n, size = 200) => Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(size, n), Buffer.from('IEND'), Buffer.from([0xae, 0x42, 0x60, 0x82])]);
+const wrapped = (bytes) => bytes.toString('base64').replace(/(.{76})/g, '$1\r\n');   // as Shortcuts writes base64 unless told not to
+const shared = (pictures, more = {}) => JSON.stringify({ job: 'photos', pictures: pictures.map((p) => p.toString('base64')), ...more });
+const same = (found, wanted) => assert.deepEqual(found.map((p) => p.data.toString('hex')), wanted.map((p) => p.toString('hex')));
+
+test('unpack: a picture is told from its first bytes', () => {
+  assert.equal(typeOf(jpeg(1)), 'image/jpeg');
+  assert.equal(typeOf(png(1)), 'image/png');
+  assert.equal(typeOf(Buffer.from('GIF89a and so on')), '');
+  assert.equal(typeOf(Buffer.from('%PDF-1.7 and so on')), '');
+  assert.equal(typeOf(Buffer.from([0xff, 0xd8])), '');
+  assert.equal(typeOf(null), '');
+});
+
+test('unpack: the pictures in a shared file are found in order, whatever kind they are', () => {
+  const sent = [jpeg(1), png(2), jpeg(3)];
+  const { pictures, skipped } = picturesIn(shared(sent));
+  same(pictures, sent);
+  assert.deepEqual(pictures.map((p) => [p.type, p.ext]), [['image/jpeg', 'jpg'], ['image/png', 'png'], ['image/jpeg', 'jpg']]);
+  assert.equal(skipped, 0);
+});
+
+test('unpack: base64 written with line breaks in it is read all the same', () => {
+  const sent = [jpeg(1, 900), png(2, 700)];
+  const text = '{"job":"photos","pictures":["' + wrapped(sent[0]) + '","' + wrapped(sent[1]) + '"]}';
+  assert.throws(() => JSON.parse(text), 'line breaks inside a string are not JSON');
+  assert.equal(dataIn(text).job, 'photos', 'but with them taken out it is');
+  same(picturesIn(text).pictures, sent);
+  // And when the line breaks were written as \r\n inside the JSON, as a program would write them.
+  same(picturesIn(JSON.stringify({ job: 'photos', pictures: sent.map(wrapped) })).pictures, sent);
+});
+
+test('unpack: pictures joined by line breaks instead of the separator are still told apart', () => {
+  const sent = [jpeg(1, 500), jpeg(2, 500), png(3, 500)];
+  const oneLineEach = '{"job":"photos","pictures":["' + sent.map((p) => p.toString('base64')).join('\n') + '"]}';
+  same(picturesIn(oneLineEach).pictures, sent);
+  const wrappedToo = '{"job":"photos","pictures":["' + sent.map(wrapped).join('\r\n') + '"]}';
+  same(picturesIn(wrappedToo).pictures, sent);
+  const spaces = '{"job":"photos","pictures":["' + sent.map((p) => p.toString('base64')).join(' ') + '"]}';
+  same(picturesIn(spaces).pictures, sent);
+});
+
+test('unpack: a line break that happens to fall before what looks like a picture does not cut one in two', () => {
+  // Base64 lines are 76 characters, which is 57 bytes. A picture that has the bytes a JPEG starts
+  // with at byte 57 has a second line that begins exactly as a new picture would.
+  const tricky = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(53, 7), Buffer.from([0xff, 0xd8, 0xff, 0xe1]), Buffer.alloc(300, 8), Buffer.from([0xff, 0xd9])]);
+  const lines = wrapped(tricky).split('\r\n');
+  assert.ok(lines[1].startsWith('/9j/'), 'the made-up picture is as tricky as intended');
+  const next = jpeg(2, 300);
+  const text = '{"job":"photos","pictures":["' + wrapped(tricky) + '","' + wrapped(next) + '"]}';
+  same(picturesIn(text).pictures, [tricky, next]);
+  const joined = '{"job":"photos","pictures":["' + wrapped(tricky) + '\r\n' + wrapped(next) + '"]}';
+  same(picturesIn(joined).pictures, [tricky, next]);
+});
+
+test('unpack: a file that is not quite JSON still gives up its pictures', () => {
+  const sent = [jpeg(1), png(2)];
+  const b64 = sent.map((p) => p.toString('base64'));
+  same(picturesIn('{"job":"photos","pictures":["' + b64[0] + '","' + b64[1]).pictures, sent);                 // the end was left off
+  same(picturesIn(b64[0] + '","' + b64[1] + '"]}').pictures, sent);                                            // the beginning was
+  same(picturesIn('{"job":"photos","pictures":"' + b64.join(',') + '"}').pictures, sent);                      // no list at all
+  same(picturesIn(JSON.stringify({ job: 'photos', pictures: b64 }).replace(/\//g, '\\/')).pictures, sent);     // slashes written as \/
+  same(picturesIn(JSON.stringify({ pictures: b64.map((b, i) => 'data:' + (i ? 'image/png' : 'image/jpeg') + ';base64,' + b) })).pictures, sent);
+  assert.equal(dataIn('{"job":"photos","pictures":["' + b64[0]), null);
+});
+
+test('unpack: what is not a picture is left out, and no more than the most allowed are kept', () => {
+  const sent = [jpeg(1), jpeg(2), jpeg(3)];
+  const mixed = JSON.stringify({ job: 'photos', pictures: ['hello', Buffer.from('GIF89a not one of ours, however long it goes on').toString('base64'), sent[0].toString('base64'), '', Buffer.from('%PDF-1.7 a page, not a picture').toString('base64'), sent[1].toString('base64')] });
+  const found = picturesIn(mixed);
+  same(found.pictures, [sent[0], sent[1]]);
+  assert.equal(found.skipped, 0);
+  const capped = picturesIn(shared(sent), { most: 2 });
+  same(capped.pictures, [sent[0], sent[1]]);
+  assert.equal(capped.skipped, 1);
+  assert.deepEqual(picturesIn(''), { pictures: [], skipped: 0 });
+  assert.deepEqual(picturesIn(null), { pictures: [], skipped: 0 });
+  assert.deepEqual(picturesIn('{"job":"photos","pictures":[]}'), { pictures: [], skipped: 0 });
+});
+
+test('importer: a job file shared whole is unpacked and then read like any other', async () => {
+  const dir = await library();
+  const sent = [png(1, 600), jpeg(2, 600), jpeg(3, 600)];
+  await writeFile(join(dir, 'inbox', 'job-482915.json'), '{"job":"photos","pictures":["' + sent.map(wrapped).join('","') + '"]}');
+  let given = null;
+  const out = await processJobs(dir, options(async ({ pictures, kind, shared: flag }) => { given = { pictures, kind, shared: flag }; return READING; }));
+
+  assert.deepEqual(out.read, [{ id: '482915', recipe: 'rp482915', title: 'Weeknight lentil soup' }]);
+  assert.deepEqual(out.failed, []);
+  same(given.pictures, sent);
+  assert.equal(given.shared, true, 'the reader is told these were shared from another app');
+  assert.deepEqual(given.pictures.map((p) => p.type), ['image/png', 'image/jpeg', 'image/jpeg']);
+  assert.equal(given.kind, 'screenshot', 'a PNG among them says screenshots');
+
+  const recipe = await json(join(dir, 'recipes', 'rp482915.json'));
+  assert.equal(recipe.review, true);
+  assert.equal(recipe.by, 'a Shortcut');
+  assert.deepEqual(recipe.originals, ['originals/rp482915/1.png', 'originals/rp482915/2.jpg', 'originals/rp482915/3.jpg']);
+  for (let i = 0; i < sent.length; i++) assert.equal((await readFile(join(dir, recipe.originals[i]))).toString('hex'), sent[i].toString('hex'));
+  assert.deepEqual(await readdir(join(dir, 'inbox')), [], 'the file and its unpacked pictures are gone');
+  assert.equal(summary(out), 'Importer: 1 recipe read from pictures');
+  await rm(dir, { recursive: true, force: true });
+});
+
+test('importer: when a shared file cannot be read, what is left is an ordinary job the app can show', async () => {
+  const dir = await library();
+  const sent = [jpeg(1, 600), jpeg(2, 600)];
+  const path = jobPath('482915');
+  await writeFile(join(dir, path), shared(sent));
+  const out = await processJobs(dir, options(async () => { throw new JobError('The free AI service is at its limit for now. Try again in a while.'); }));
+  assert.deepEqual(out.failed, [{ id: '482915', reason: 'The free AI service is at its limit for now. Try again in a while.' }]);
+
+  const left = await json(join(dir, path));
+  assert.deepEqual(left.images, ['inbox/job-482915/1.jpg', 'inbox/job-482915/2.jpg']);
+  assert.equal('pictures' in left, false, 'the pictures are files now, not text inside this one');
+  assert.ok((await stat(join(dir, path))).size < 1000);
+  const job = readJob(left, path);
+  assert.equal(job.state, 'failed');
+  assert.equal(job.pictures, 2);
+  assert.equal(job.by, 'a Shortcut');
+  assert.equal(job.shared, true, 'and it still says where it came from, for the next try');
+  for (let i = 0; i < sent.length; i++) assert.equal((await readFile(join(dir, left.images[i]))).toString('hex'), sent[i].toString('hex'));
+
+  // It is left alone until another try is asked for, exactly like a job the app sent.
+  const idle = await processJobs(dir, options(async () => READING));
+  assert.deepEqual(idle.left, [path]);
+  await writeFile(join(dir, path), serializeJob(retriedJob(left)));
+  const again = await processJobs(dir, options(async () => READING));
+  assert.deepEqual(again.read.map((r) => r.recipe), ['rp482915']);
+  assert.deepEqual(await readdir(join(dir, 'inbox')), []);
+  await rm(dir, { recursive: true, force: true });
+});
+
+const NO_PICTURE = 'No picture was found in what was shared. In the Send to Recipes Shortcut, check that Convert Image says JPEG.';
+
+test('importer: a shared file with no picture in it becomes a failed job that says so, without asking the reader', async () => {
+  const dir = await library();
+  const sent = {
+    111111: '{"job":"photos","pictures":[]}',
+    222222: JSON.stringify({ job: 'photos', pictures: ['hello', Buffer.from('GIF89a not one of ours').toString('base64')] }),
+    333333: '{"job":"photos","pictures":["',                                              // cut off before any picture
+    444444: 'not json',                                                                    // not JSON, and no picture in it
+    555555: '',                                                                            // nothing at all
+    666666: Buffer.from('ftypheic, the kind a phone camera saves').toString('base64') + '\n',   // a picture of a kind not read here
+    777777: '{"something":"else"}',                                                        // JSON, but not a job of any kind
+    888888: '"just a piece of text"',
+  };
+  for (const [id, text] of Object.entries(sent)) await writeFile(join(dir, jobPath(id)), text);
+  let asked = 0;
+  const out = await processJobs(dir, options(async () => { asked++; return READING; }));
+  assert.equal(asked, 0);
+  assert.deepEqual(out.failed.map((f) => f.id), Object.keys(sent));
+  assert.ok(out.failed.every((f) => f.reason === NO_PICTURE));
+  assert.deepEqual(out.left, []);
+  for (const id of Object.keys(sent)) {
+    const job = readJob(await json(join(dir, jobPath(id))), jobPath(id));
+    assert.equal(job.state, 'failed', id);
+    assert.equal(job.pictures, 0);
+    assert.equal(job.error, NO_PICTURE);
+    assert.equal(job.by, 'a Shortcut');
+  }
+  assert.equal(summary(out), 'Importer: 8 lots of pictures could not be read');
+  // A second run leaves them alone: there is nothing in them to try again.
+  const idle = await processJobs(dir, options(async () => { asked++; return READING; }));
+  assert.equal(asked, 0);
+  assert.equal(idle.left.length, 8);
+  await rm(dir, { recursive: true, force: true });
+});
+
+// ---------- exactly what the Send to Recipes Shortcut sends: one picture's base64 to a line, and no JSON ----------
+
+const oneToALine = (pictures, breaks = '') => pictures.map((p) => (breaks ? p.toString('base64').replace(/(.{76})/g, '$1' + breaks) : p.toString('base64'))).join('\n');
+
+test('unpack: what the Shortcut sends, one picture to a line with no JSON around it, gives up its pictures', () => {
+  const sent = [jpeg(1, 800), jpeg(2, 801), png(3, 802), jpeg(4, 803), jpeg(5, 804)];   // sizes that end the base64 with and without padding
+  assert.equal(dataIn(oneToALine(sent)), null, 'it is not JSON');
+  same(picturesIn(oneToALine(sent)).pictures, sent);
+  same(picturesIn(oneToALine(sent) + '\n').pictures, sent);
+  same(picturesIn('\n' + oneToALine(sent) + '\n\n').pictures, sent);
+  // With the line breaks Base64 Encode adds unless it is told not to, whichever kind they are.
+  same(picturesIn(oneToALine(sent, '\r\n')).pictures, sent);
+  same(picturesIn(oneToALine(sent, '\n')).pictures, sent);
+  same(picturesIn(oneToALine(sent, '\r\n') + '\r\n').pictures, sent);
+  assert.equal(picturesIn(oneToALine(sent, '\r\n')).skipped, 0);
+  // One picture alone, and ten of them.
+  same(picturesIn(oneToALine([sent[0]])).pictures, [sent[0]]);
+  const ten = Array.from({ length: 10 }, (x, i) => jpeg(i + 1, 500 + i));
+  same(picturesIn(oneToALine(ten, '\r\n')).pictures, ten);
+});
+
+test('importer: what the Shortcut sends is unpacked and read, with or without line breaks inside each picture', async () => {
+  for (const breaks of ['', '\r\n']) {
+    const dir = await library();
+    const sent = [jpeg(1, 600), jpeg(2, 601), png(3, 602)];
+    await writeFile(join(dir, 'inbox', 'job-730144.json'), oneToALine(sent, breaks));
+    let given = null;
+    const out = await processJobs(dir, options(async ({ pictures, shared: flag }) => { given = { pictures, shared: flag }; return READING; }));
+    assert.deepEqual(out.read, [{ id: '730144', recipe: 'rp730144', title: 'Weeknight lentil soup' }]);
+    assert.deepEqual(out.failed, []);
+    same(given.pictures, sent);
+    assert.equal(given.shared, true);
+    const recipe = await json(join(dir, 'recipes', 'rp730144.json'));
+    assert.deepEqual(recipe.originals, ['originals/rp730144/1.jpg', 'originals/rp730144/2.jpg', 'originals/rp730144/3.png']);
+    assert.equal(recipe.by, 'a Shortcut');
+    for (let i = 0; i < sent.length; i++) assert.equal((await readFile(join(dir, recipe.originals[i]))).toString('hex'), sent[i].toString('hex'));
+    assert.deepEqual(await readdir(join(dir, 'inbox')), []);
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('importer: a title or a sender written into a shared file is used, and more than ten pictures are cut to ten', async () => {
+  const dir = await library();
+  const many = Array.from({ length: 12 }, (x, i) => jpeg(i + 1, 300));
+  await writeFile(join(dir, jobPath('482915')), shared(many, { title: 'Sunday soup', by: 'Notes', kind: 'screenshot' }));
+  let count = 0;
+  const out = await processJobs(dir, options(async ({ pictures }) => { count = pictures.length; return READING; }));
+  assert.equal(count, 10);
+  assert.deepEqual(out.read, [{ id: '482915', recipe: 'rp482915', title: 'Sunday soup' }]);
+  const recipe = await json(join(dir, 'recipes', 'rp482915.json'));
+  assert.equal(recipe.by, 'Notes');
+  assert.equal(recipe.source.kind, 'screenshot');
+  assert.equal(recipe.originals.length, 10);
+  await rm(dir, { recursive: true, force: true });
+});
+
+test('importer: an ordinary job may hold a PNG, and a file with the wrong ending is judged by what is in it', async () => {
+  const dir = await library();
+  const id = 'abc123def456';
+  const job = makeJob({ id, count: 2, at: '2026-03-01T10:00:00.000Z', by: 'Phone', exts: ['png', 'jpg'] });
+  await mkdir(join(dir, 'inbox', 'job-' + id), { recursive: true });
+  await writeFile(join(dir, picturePath(id, 1, 'png')), jpeg(1));    // named .png, but a JPEG inside
+  await writeFile(join(dir, picturePath(id, 2)), png(2));            // named .jpg, but a PNG inside
+  await writeFile(join(dir, jobPath(id)), serializeJob(job));
+  let types = null;
+  let flag = null;
+  const out = await processJobs(dir, options(async ({ pictures, shared: s }) => { types = pictures.map((p) => p.type); flag = s; return READING; }));
+  assert.equal(out.read.length, 1);
+  assert.deepEqual(types, ['image/jpeg', 'image/png']);
+  assert.equal(flag, false, 'pictures sent from the app are not marked as shared');
+  assert.deepEqual((await json(join(dir, 'recipes', jobRecipeId(id) + '.json'))).originals, ['originals/rp' + id + '/1.png', 'originals/rp' + id + '/2.jpg']);
+  await rm(dir, { recursive: true, force: true });
+});
+
+test('gemini: pictures shared from another app get the instruction about a page that shows the whole note', () => {
+  assert.match(gemini.NOTE_PAGE, /page from a notes app/);
+  assert.match(gemini.NOTE_PAGE, /use it as the title/);
+  assert.match(gemini.NOTE_PAGE, /do not take the copies as a second lot/);
+  const pictures = [{ data: png(1), type: 'image/png' }, { data: jpeg(2), type: 'image/jpeg' }];
+  const shared = gemini.request({ pictures, shared: true });
+  assert.equal(shared.system_instruction, gemini.INSTRUCTION + '\n\n' + gemini.NOTE_PAGE);
+  assert.deepEqual(shared.input.filter((p) => p.type === 'image').map((p) => p.mime_type), ['image/png', 'image/jpeg']);
+  // Pictures sent from the app's own screen are read with the instruction exactly as it was.
+  assert.equal(gemini.request({ pictures }).system_instruction, gemini.INSTRUCTION);
+  assert.doesNotMatch(gemini.INSTRUCTION, /notes app/);
+});
+
+test('gemini: the reader passes on that pictures were shared', async () => {
+  let sent = null;
+  const send = async (url, init) => { sent = JSON.parse(init.body); return { ok: true, status: 200, json: async () => ({ status: 'completed', output_text: JSON.stringify({ title: 'Lemon rice', suggested_title: '', ingredients: [{ heading: '', lines: ['1 cup rice'] }], steps: [{ heading: '', lines: ['Cook it.'] }], notes: '', time: '', serves: '', source: '', unsure: [] }) }) }; };
+  await gemini.read({ pictures: [{ data: jpeg(1), type: 'image/jpeg' }], key: 'a-key', shared: true, fetch: send });
+  assert.match(sent.system_instruction, /page from a notes app/);
+  await gemini.read({ pictures: [{ data: jpeg(1), type: 'image/jpeg' }], key: 'a-key', fetch: send });
+  assert.doesNotMatch(sent.system_instruction, /page from a notes app/);
 });

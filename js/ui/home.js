@@ -55,10 +55,19 @@ function jobRow(job) {
       h('div', { class: 'job-buttons' }, h('button', { class: 'job-btn', type: 'button', onclick: () => dropQueued([job.id]) }, 'Cancel')));
   }
   if (job.state === 'failed') {
+    // With no picture in it there is nothing to try again: what was shared held none that could be read.
     return h('div', { class: 'job is-failed' },
-      h('p', { class: 'job-title', text: named(job) + ' could not be read' }),
+      h('p', { class: 'job-title', text: (job.pictures ? named(job) : 'What was shared') + ' could not be read' }),
       h('p', { class: 'job-sub', text: job.error }),
-      h('div', { class: 'job-buttons' }, again, discard));
+      h('div', { class: 'job-buttons' }, job.pictures ? again : null, discard));
+  }
+  if (job.packed) {
+    // Shared from another app by a Shortcut. The file holds the pictures and is not fetched, so there
+    // is no count, title or time to show until the library has unpacked it.
+    return h('div', { class: 'job' },
+      h('p', { class: 'job-title', text: 'Reading pictures sent from another app...' }),
+      h('p', { class: 'job-sub', text: 'It usually takes a minute or two. If nothing comes of it, reading may not be set up in this library: see Settings, Read photos.' }),
+      h('div', { class: 'job-buttons' }, discard));
   }
   const minutes = minutesSince(job.asked || job.at);
   const slow = minutes >= 10 && !job.pending;

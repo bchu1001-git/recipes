@@ -11,7 +11,7 @@ import { fakeGitHub } from './fake-github.js';
 import { createClient, GitHubError } from '../js/sync/github.js';
 import { syncLibrary } from '../js/sync/sync.js';
 import { makeRecipe, starterFolders, reviewNotes } from '../js/model.js';
-import { jobPath, picturePath, jobRecipeId, originalPath, makeJob, serializeJob, failedJob, WORKFLOW_PATH } from '../js/jobs.js';
+import { jobPath, picturePath, jobRecipeId, originalPath, makeJob, serializeJob, failedJob, WORKFLOW_PATH, LARGE_JOB_FILE } from '../js/jobs.js';
 import { processJobs, summary, JobError } from '../importer/jobs.mjs';
 
 let clock = Date.parse('2026-03-01T00:00:00.000Z');
@@ -349,7 +349,7 @@ test('photos: pictures whose job is already in the library, or already read, are
   assert.equal(hub.calls().filter((c) => c === 'POST /git/blobs').length, 0);
 });
 
-test('photos: job files are never mistaken for pages saved from Safari, and other jobs are left alone', async () => {
+test('photos: job files are never mistaken for pages saved from Safari, and no job file is changed by the app', async () => {
   const hub = fakeGitHub({ empty: false });
   const link = '{"v":1,"job":"link","id":"link00000001","url":"https://kitchen.example/soup"}\n';
   hub.write('inbox/job-link00000001.json', link, 'A newer app: a link to fetch');
@@ -360,7 +360,10 @@ test('photos: job files are never mistaken for pages saved from Safari, and othe
   const out = await phone.sync();
   assert.equal(out.added, 0);
   assert.deepEqual(phone.recipes, []);
-  assert.deepEqual(phone.jobs(), [['abc123def456', 'waiting', 1]]);
+  // The job of another kind is not shown. The file that is not JSON is how a Shortcut sends pictures, so it
+  // shows as being read until the library's importer has looked at it and said what it found.
+  assert.deepEqual(phone.jobs(), [['abc123def456', 'waiting', 1], ['broken000001', 'waiting', 0]]);
+  assert.equal(phone.base.jobs[1].packed, true);
   assert.equal(hub.files().get('inbox/job-link00000001.json'), link);
   assert.equal(hub.files().get('inbox/job-broken000001.json'), 'not json');
   assert.ok(hub.files().has(picturePath('abc123def456', 1)));
@@ -388,4 +391,163 @@ test('photos: a job that failed on the importer’s side is shown without being 
   await phone.sync();
   assert.equal(hub.calls().filter((c) => c.includes('/git/blobs/')).length, 0);
   assert.equal(phone.base.jobs[0].error, 'The AI service did not accept the key.');
+});
+
+// ---------- pictures shared whole by a Shortcut: one file with the pictures inside it ----------
+
+const NO_PICTURE = 'No picture was found in what was shared. In the Send to Recipes Shortcut, check that Convert Image says JPEG.';
+const PICTURE = (n, size = 9000) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(size, n), Buffer.from([0xff, 0xd9])]);
+const sharedFile = (pictures) => JSON.stringify({ job: 'photos', pictures: pictures.map((p) => p.toString('base64')) });
+
+test('photos: pictures shared whole by a Shortcut show as being read, and their file is never downloaded', async () => {
+  const hub = fakeGitHub({ empty: false });
+  const file = sharedFile([PICTURE(1), PICTURE(2)]);
+  assert.ok(file.length > LARGE_JOB_FILE);
+  hub.write(jobPath('482915'), file, 'Pictures from Notes');
+  const phone = device('Phone', hub);
+  hub.forgetCalls();
+  await phone.sync();
+  assert.deepEqual(phone.jobs(), [['482915', 'waiting', 0]]);
+  assert.equal(phone.base.jobs[0].packed, true);
+  assert.equal(phone.base.jobs[0].raw, null, 'nothing of it is kept on the device');
+  assert.equal(hub.calls().filter((c) => c.includes('/git/blobs/' + phone.base.jobs[0].sha)).length, 0);
+  assert.equal(hub.files().get(jobPath('482915')), file, 'and it is left exactly as it was');
+  assert.deepEqual(phone.recipes, []);
+
+  // The library's importer unpacks it and reads it; the recipe then arrives like any other.
+  const out = await importerRuns(hub);
+  assert.deepEqual(out.read, [{ id: '482915', recipe: 'rp482915', title: 'Lemon rice' }]);
+  const tablet = device('Tablet', hub);
+  await phone.sync();
+  await tablet.sync();
+  for (const d of [phone, tablet]) {
+    assert.deepEqual(d.jobs(), []);
+    assert.equal(d.recipes.length, 1);
+    assert.equal(d.recipes[0].id, 'rp482915');
+    assert.equal(d.recipes[0].review, true);
+    assert.deepEqual(d.recipes[0].originals, [originalPath('rp482915', 1), originalPath('rp482915', 2)]);
+    assert.ok(d.base.originals[originalPath('rp482915', 2)]);
+  }
+  assert.deepEqual(hub.snapshot().get(originalPath('rp482915', 2)), PICTURE(2));
+  assert.equal([...hub.snapshot().keys()].some((path) => path.startsWith('inbox/')), false);
+});
+
+test('photos: Discard removes a shared file that is still waiting, and Try again leaves it be', async () => {
+  const hub = fakeGitHub({ empty: false });
+  const file = sharedFile([PICTURE(1), PICTURE(2)]);
+  hub.write(jobPath('482915'), file, 'Pictures from Notes');
+  const phone = device('Phone', hub);
+  await phone.sync();
+
+  phone.ask('482915', 'retry');   // there is nothing to try again yet: it has not been read once
+  const commits = hub.history().length;
+  await phone.sync();
+  assert.equal(hub.history().length, commits);
+  assert.equal(hub.files().get(jobPath('482915')), file);
+  assert.deepEqual(phone.actions, []);
+  assert.deepEqual(phone.jobs(), [['482915', 'waiting', 0]]);
+
+  phone.ask('482915', 'discard');
+  await phone.sync();
+  assert.equal(hub.snapshot().has(jobPath('482915')), false);
+  assert.deepEqual(phone.jobs(), []);
+  assert.equal(hub.history()[0], 'Phone: pictures discarded');
+  const out = await importerRuns(hub);
+  assert.deepEqual(out.read, []);
+});
+
+test('photos: a shared file that could not be read comes back as an ordinary job, to try again or discard', async () => {
+  const hub = fakeGitHub({ empty: false });
+  hub.write(jobPath('482915'), sharedFile([PICTURE(1), PICTURE(2)]), 'Pictures from Notes');
+  const phone = device('Phone', hub);
+  await phone.sync();
+  await importerRuns(hub, async () => { throw new JobError('The free AI service is at its limit for now. Try again in a while.'); });
+  await phone.sync();
+  assert.deepEqual(phone.jobs(), [['482915', 'failed', 2]]);
+  assert.equal(phone.base.jobs[0].error, 'The free AI service is at its limit for now. Try again in a while.');
+  assert.equal(phone.base.jobs[0].packed, undefined);
+  assert.ok(hub.files().get(jobPath('482915')).length < 1000, 'the file is a small one now');
+  assert.deepEqual(hub.snapshot().get(picturePath('482915', 1)), PICTURE(1));
+
+  phone.ask('482915', 'retry');
+  await phone.sync();
+  assert.deepEqual(phone.jobs(), [['482915', 'waiting', 2]]);
+  const out = await importerRuns(hub);
+  assert.equal(out.read.length, 1);
+  await phone.sync();
+  assert.deepEqual(phone.jobs(), []);
+  assert.equal(phone.recipes[0].id, 'rp482915');
+});
+
+test('photos: what was shared with no picture in it comes back with the reason, and Discard clears it', async () => {
+  const hub = fakeGitHub({ empty: false });
+  hub.write(jobPath('482915'), '{"job":"photos","pictures":[]}', 'Pictures from Notes');
+  const phone = device('Phone', hub);
+  await phone.sync();
+  assert.deepEqual(phone.jobs(), [['482915', 'waiting', 0]], 'a small file is told by what it says');
+  assert.equal(phone.base.jobs[0].packed, true);
+
+  const out = await importerRuns(hub);
+  assert.deepEqual(out.failed, [{ id: '482915', reason: NO_PICTURE }]);
+  await phone.sync();
+  assert.deepEqual(phone.jobs(), [['482915', 'failed', 0]]);
+  assert.equal(phone.base.jobs[0].error, NO_PICTURE);
+
+  phone.ask('482915', 'discard');
+  await phone.sync();
+  assert.deepEqual(phone.jobs(), []);
+  assert.equal([...hub.snapshot().keys()].some((path) => path.startsWith('inbox/')), false);
+});
+
+// ---------- exactly what the Send to Recipes Shortcut sends: one picture's base64 to a line, and no JSON ----------
+
+const plainFile = (pictures) => pictures.map((p) => p.toString('base64')).join('\n');
+
+test('photos: the plain file the Shortcut sends shows as being read, large or small, and becomes a recipe', async () => {
+  for (const [id, size] of [['730144', 9000], ['730145', 300]]) {
+    const hub = fakeGitHub({ empty: false });
+    const file = plainFile([PICTURE(1, size), PICTURE(2, size)]);
+    assert.equal(file.length > LARGE_JOB_FILE, size === 9000);
+    hub.write(jobPath(id), file, 'Pictures to read');
+    const phone = device('Phone', hub);
+    hub.forgetCalls();
+    await phone.sync();
+    assert.deepEqual(phone.jobs(), [[id, 'waiting', 0]]);
+    assert.equal(phone.base.jobs[0].packed, true);
+    assert.equal(phone.base.jobs[0].raw, null);
+    const fetched = () => hub.calls().filter((c) => c.includes('/git/blobs/' + phone.base.jobs[0].sha)).length;
+    assert.equal(fetched(), size === 9000 ? 0 : 1, 'a large one is never downloaded; a small one once, to see what it is');
+    await phone.sync();
+    assert.equal(fetched(), size === 9000 ? 0 : 1, 'and not again');
+    assert.equal(hub.files().get(jobPath(id)), file);
+
+    const out = await importerRuns(hub);
+    assert.deepEqual(out.read, [{ id, recipe: 'rp' + id, title: 'Lemon rice' }]);
+    await phone.sync();
+    assert.deepEqual(phone.jobs(), []);
+    assert.equal(phone.recipes[0].id, 'rp' + id);
+    assert.deepEqual(hub.snapshot().get(originalPath('rp' + id, 2)), PICTURE(2, size));
+  }
+});
+
+test('photos: a small file under a job name that is not JSON and holds no picture is explained, never left unexplained', async () => {
+  for (const text of ['hello there', '', 'AAAAGGZ0eXBoZWlj\nAAAAGGZ0eXBoZWlj']) {
+    const hub = fakeGitHub({ empty: false });
+    hub.write(jobPath('730146'), text, 'Pictures to read');
+    const phone = device('Phone', hub);
+    await phone.sync();
+    assert.deepEqual(phone.jobs(), [['730146', 'waiting', 0]], 'it shows as being read until the library has looked at it');
+    assert.equal(phone.base.jobs[0].packed, true);
+
+    const out = await importerRuns(hub);
+    assert.deepEqual(out.failed, [{ id: '730146', reason: NO_PICTURE }]);
+    await phone.sync();
+    assert.deepEqual(phone.jobs(), [['730146', 'failed', 0]]);
+    assert.equal(phone.base.jobs[0].error, NO_PICTURE);
+
+    phone.ask('730146', 'discard');
+    await phone.sync();
+    assert.deepEqual(phone.jobs(), []);
+    assert.equal([...hub.snapshot().keys()].some((path) => path.startsWith('inbox/')), false);
+  }
 });

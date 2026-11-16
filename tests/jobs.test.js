@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MAX_PICTURES, JOB_FILE, ORIGINAL, WORKFLOW_PATH, newJobId, jobPath, jobFolder, picturePath, jobRecipeId, originalPath,
-  makeJob, serializeJob, readJob, failedJob, retriedJob, fitWithin, appRepository, workflowText,
+  MAX_PICTURES, MAX_JOB_PICTURES, LARGE_JOB_FILE, JOB_FILE, ORIGINAL, WORKFLOW_PATH, newJobId, jobPath, jobFolder, picturePath, pictureExt,
+  jobRecipeId, originalPath, makeJob, serializeJob, readJob, failedJob, retriedJob, isShared, packedJob, fitWithin, appRepository, workflowText,
 } from '../js/jobs.js';
 
 test('jobs: a job file names its pictures in its own folder, in order', () => {
@@ -90,7 +90,7 @@ test('jobs: a file that is not a picture job this version understands is not one
   assert.equal(readJob({ ...good, images: ['inbox/job-zzz999zzz999/1.jpg'] }, jobPath(id)), null, 'a picture in another job');
   assert.equal(readJob({ ...good, images: ['../secrets.txt'] }, jobPath(id)), null, 'a path outside its folder');
   assert.equal(readJob({ ...good, images: ['recipes/r1.json'] }, jobPath(id)), null, 'not a picture');
-  assert.equal(readJob({ ...good, images: Array.from({ length: MAX_PICTURES + 1 }, (x, i) => picturePath(id, i + 1)) }, jobPath(id)), null, 'too many pictures');
+  assert.equal(readJob({ ...good, images: Array.from({ length: MAX_JOB_PICTURES + 1 }, (x, i) => picturePath(id, i + 1)) }, jobPath(id)), null, 'too many pictures');
   assert.equal(readJob(null, jobPath(id)), null);
   assert.equal(readJob([good], jobPath(id)), null);
   assert.equal(readJob('text', jobPath(id)), null);
@@ -143,4 +143,76 @@ test('jobs: the workflow file runs the importer from the app when a picture job 
     if (!line || line.startsWith('#')) continue;
     assert.equal(/^( {2})*\S/.test(line), true, 'odd indent: ' + line);
   }
+});
+
+// ---------- pictures shared whole by a Shortcut ----------
+
+test('jobs: a job may hold more pictures than the app itself sends, because a shared note brings a page along', () => {
+  const id = 'abc123def456';
+  assert.ok(MAX_JOB_PICTURES > MAX_PICTURES);
+  const job = readJob(makeJob({ id, count: MAX_JOB_PICTURES }), jobPath(id));
+  assert.equal(job.pictures, MAX_JOB_PICTURES);
+});
+
+test('jobs: a picture may be a PNG, and it keeps that ending where it is kept', () => {
+  const id = '482915';
+  const data = makeJob({ id, count: 3, exts: ['jpg', 'png'] });
+  assert.deepEqual(data.images, ['inbox/job-482915/1.jpg', 'inbox/job-482915/2.png', 'inbox/job-482915/3.jpg']);
+  assert.equal(readJob(data, jobPath(id)).pictures, 3);
+  assert.deepEqual(data.images.map(pictureExt), ['jpg', 'png', 'jpg']);
+  assert.equal(originalPath('rp482915', 2, pictureExt(data.images[1])), 'originals/rp482915/2.png');
+  assert.equal(originalPath('rp482915', 1), 'originals/rp482915/1.jpg');
+  assert.equal(readJob({ ...data, images: ['inbox/job-482915/1.gif'] }, jobPath(id)), null, 'no other kind of file');
+});
+
+test('jobs: a job with no pictures is only ever one that failed', () => {
+  const id = '482915';
+  const none = makeJob({ id, count: 0, by: 'a Shortcut' });
+  assert.equal(readJob(none, jobPath(id)), null);
+  const failed = readJob(failedJob(none, 'No picture was found in what was shared.', '2026-03-01T10:02:00.000Z'), jobPath(id));
+  assert.equal(failed.state, 'failed');
+  assert.equal(failed.pictures, 0);
+  assert.equal(failed.error, 'No picture was found in what was shared.');
+});
+
+test('jobs: whatever sits under a job file\u2019s name and is not somebody else\u2019s was shared by a Shortcut', () => {
+  // What the Send to Recipes Shortcut sends is not JSON at all: one picture's base64 to a line.
+  assert.equal(isShared(null), true);
+  assert.equal(isShared(undefined), true);
+  assert.equal(isShared('some text'), true);
+  assert.equal(isShared(['abc']), true);
+  // The tidier form, and anything else a hand-made Shortcut might send by mistake.
+  assert.equal(isShared({ job: 'photos', pictures: ['abc', 'def'] }), true);
+  assert.equal(isShared({ pictures: 'abc' }), true);
+  assert.equal(isShared({ job: 'photos' }), true);
+  assert.equal(isShared({ something: 'else' }), true);
+  // Two things are never touched: a job that names picture files, and a job of another kind.
+  assert.equal(isShared(makeJob({ id: 'abc123def456', count: 1 })), false);
+  assert.equal(isShared({ job: 'photos', pictures: ['abc'], images: [] }), false);
+  assert.equal(isShared({ job: 'link', url: 'https://kitchen.example/soup' }), false);
+  assert.equal(isShared({ job: 'link', pictures: ['abc'] }), false);
+});
+
+test('jobs: a job unpacked from a shared file says so, and one sent from the app does not', () => {
+  const id = '482915';
+  const shared = makeJob({ id, count: 2, by: 'a Shortcut', shared: true });
+  assert.equal(shared.shared, true);
+  assert.equal(readJob(shared, jobPath(id)).shared, true);
+  const own = makeJob({ id, count: 2, by: 'Phone' });
+  assert.equal('shared' in own, false);
+  assert.equal(readJob(own, jobPath(id)).shared, false);
+  assert.equal(readJob(retriedJob(failedJob(shared, 'Busy.', '2026-03-01T10:02:00.000Z')), jobPath(id)).shared, true, 'another try keeps it');
+});
+
+test('jobs: all the app knows of a shared job file is that it is waiting', () => {
+  const job = packedJob('inbox/job-482915.json');
+  assert.equal(job.id, '482915');
+  assert.equal(job.path, 'inbox/job-482915.json');
+  assert.equal(job.state, 'waiting');
+  assert.equal(job.packed, true);
+  assert.equal(job.pictures, 0);
+  assert.equal(jobRecipeId(job.id), 'rp482915');
+  assert.equal(packedJob('inbox/482915.json'), null, 'not a job file name');
+  assert.ok(LARGE_JOB_FILE > 5000, 'an ordinary job file is far smaller than this');
+  assert.ok(serializeJob(makeJob({ id: 'abc123def456', count: MAX_JOB_PICTURES, title: 'x'.repeat(200), by: 'y'.repeat(60) })).length < LARGE_JOB_FILE / 4);
 });

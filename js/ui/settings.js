@@ -210,6 +210,15 @@ export function renderSettings(root) {
           library.config ? h('a', { class: 'btn btn-quiet', href: '#/read' }, library.base.reader === true ? 'See the Read photos setup' : 'Set up Read photos') : null),
 
         h('section', { class: 'set' },
+          h('h2', { class: 'label', text: 'Send from other apps' }),
+          h('p', { class: 'set-note', text: !library.config
+            ? 'Pictures of a recipe kept in a note, or in Photos, can be shared straight to your library. Connect a library first.'
+            : library.base.reader === true
+              ? 'Put Send to Recipes in the share sheet. A note that holds pictures of a recipe, or pictures from Photos, then goes straight to your library to be read.'
+              : 'Pictures of a recipe kept in a note, or in Photos, can be shared straight to your library. It relies on Read photos, so set that up first.' }),
+          library.config ? h('a', { class: 'btn btn-quiet', href: '#/send' }, 'Set up Send to Recipes') : null),
+
+        h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Backup' }),
           h('p', { class: 'set-note', text: 'One file with every recipe and folder in it.' }),
           h('div', { class: 'set-buttons' },

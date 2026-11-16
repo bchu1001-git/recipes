@@ -5,8 +5,8 @@ import { gitBlobSha } from './hash.js';
 import { mergeLibraries, serializeRecipe, serializeFolders, serializeDeleted, recipePath, recipeIdOf } from './merge.js';
 import { recipeFromCapture, SCRIPT_VERSION } from '../import/page.js';
 import {
-  JOB_FILE, ORIGINAL, WORKFLOW_PATH, MAX_PICTURES, jobPath, jobFolder, picturePath, jobRecipeId,
-  makeJob, serializeJob, readJob, retriedJob,
+  JOB_FILE, ORIGINAL, WORKFLOW_PATH, MAX_PICTURES, LARGE_JOB_FILE, jobPath, jobFolder, picturePath, jobRecipeId,
+  makeJob, serializeJob, readJob, retriedJob, isShared, packedJob,
 } from '../jobs.js';
 
 const FOLDERS = 'folders.json';
@@ -104,23 +104,33 @@ async function readInbox({ client, files, sizes, known, taken, now }) {
  * The picture jobs waiting in the library, as the app shows them: [{ id, path, sha, state, error, at,
  * by, kind, pictures, raw }]. A job file that has not changed since the last sync is not downloaded
  * again. One that cannot be fetched or read is passed over this time.
+ *
+ * A job file that a Shortcut shared whole has its pictures inside it and can be several megabytes.
+ * It is told by its size and never downloaded: it shows as `packed`, waiting, with nothing else known
+ * about it, until the library's importer has unpacked it into an ordinary job or read it. A small
+ * file that turns out to be one of these (see isShared) shows the same way, so that the person sees
+ * it until the importer has read it or said why it could not.
  */
-async function readJobs({ client, files, known }) {
+async function readJobs({ client, files, sizes, known }) {
   const before = new Map((Array.isArray(known) ? known : []).map((j) => [j.path + '\n' + j.sha, j]));
   const jobs = [];
   for (const [path, sha] of files) {
     if (!JOB_FILE.test(path)) continue;
     const same = before.get(path + '\n' + sha);
     if (same) { jobs.push(same); continue; }
-    let data = null;
+    if ((sizes.get(path) || 0) > LARGE_JOB_FILE) { jobs.push({ ...packedJob(path), sha, raw: null }); continue; }
+    let text;
     try {
-      data = JSON.parse(await client.blob(sha));
+      text = await client.blob(sha);
     } catch (err) {
       if (err.status === 0 || err.status === 401) throw err;
       continue;
     }
+    let data = null;
+    try { data = JSON.parse(text); } catch (err) { /* not JSON: that is how a Shortcut sends pictures */ }
     const job = readJob(data, path);
     if (job) jobs.push({ ...job, sha, raw: data });
+    else if (isShared(data)) jobs.push({ ...packedJob(path), sha, raw: null });   // a small one, shared whole all the same
   }
   return jobs;
 }
@@ -225,7 +235,7 @@ export async function syncLibrary({ client, local, base = {}, device = '', branc
 
     // Picture jobs. First the ones this device has yet to send: the pictures and the job file go up
     // together, which is what starts the library's importer.
-    let jobs = await readJobs({ client, files: theirFiles, known: base.jobs });
+    let jobs = await readJobs({ client, files: theirFiles, sizes, known: base.jobs });
     const sentJobs = [];
     const doneActions = [];
     const extra = [];
@@ -254,7 +264,7 @@ export async function syncLibrary({ client, local, base = {}, device = '', branc
     // Then what the person asked for: another try at a job, or throwing one away with its pictures.
     for (const asked of local.actions || []) {
       const job = jobs.find((j) => j.id === asked.id);
-      if (job && asked.action === 'retry' && !sentJobs.includes(job.id)) {
+      if (job && asked.action === 'retry' && job.raw && job.pictures && !sentJobs.includes(job.id)) {
         const data = { ...retriedJob(job.raw), asked: now };   // the changed file is what starts the importer again
         const text = serializeJob(data);
         const again = readJob(data, job.path);

@@ -4,7 +4,7 @@
 //
 // A job is one small file plus its pictures:
 //
-//   inbox/job-<id>.json     { v: 1, job: 'photos', id, images: [paths], at, by, kind, title }
+//   inbox/job-<id>.json     { v: 1, job: 'photos', id, images: [paths], at, by, kind, title, shared }
 //   inbox/job-<id>/1.jpg    the pictures, in reading order: the pages of ONE recipe
 //   inbox/job-<id>/2.jpg
 //
@@ -16,17 +16,35 @@
 // added: `error` (a sentence for the person) and `failed` (when). It is then left alone until the
 // person asks for another try, which takes those two fields out again, or discards it.
 //
+// A Shortcut that shares pictures from another app (a note, say) cannot make several files in one go,
+// so it sends one file that carries its pictures inside it, as base64. The "Send to Recipes" Shortcut
+// sends the plainest form there is, one picture to a line and nothing else:
+//
+//   inbox/job-<number>.json   <base64 of a picture>
+//                             <base64 of the next>
+//
+// Anything else that wants to send pictures in one file can use the tidier form, which is read the
+// same way:
+//
+//   inbox/job-<number>.json   { "job": "photos", "pictures": ["<base64>", "<base64>"] }
+//
+// The importer's first step is to unpack such a file into the layout above, marked `shared`. The app
+// never downloads a large one: it tells them by their size and shows a plain "being read" line (see
+// LARGE_JOB_FILE). See isShared() for which files count, and importer/unpack.mjs for how they are read.
+//
 // Other kinds of job (a pasted link, later) will use the same file name with another `job` value.
 // Whatever this version does not understand is left exactly as it is.
 
-export const MAX_PICTURES = 6;
+export const MAX_PICTURES = 6;          // the most pictures the app's own From photos screen sends
+export const MAX_JOB_PICTURES = 10;     // the most a job may hold: a shared note brings an extra page along
+export const LARGE_JOB_FILE = 20000;    // bytes. A job file larger than this has its pictures inside it
 export const PICTURE_EDGE = 2000;       // the long edge a picture is shrunk to before it is sent
 const SHORT_EDGE = 900;                 // but a tall screenshot keeps at least this much width
 const LONGEST = 8000;
 
 const ID = '[a-z0-9]{6,24}';
 export const JOB_FILE = new RegExp('^inbox/job-(' + ID + ')\\.json$');
-const JOB_PICTURE = new RegExp('^inbox/job-(' + ID + ')/([1-9][0-9]?)\\.jpg$');
+const JOB_PICTURE = new RegExp('^inbox/job-(' + ID + ')/([1-9][0-9]?)\\.(jpg|png)$');
 export const ORIGINAL = /^originals\/([A-Za-z0-9_-]+)\/[^/]+$/;
 export const WORKFLOW_PATH = '.github/workflows/import.yml';
 
@@ -39,25 +57,30 @@ export function newJobId() {
 
 export const jobPath = (id) => 'inbox/job-' + id + '.json';
 export const jobFolder = (id) => 'inbox/job-' + id + '/';
-export const picturePath = (id, n) => jobFolder(id) + n + '.jpg';
+const ending = (ext) => (ext === 'png' ? '.png' : '.jpg');
+export const picturePath = (id, n, ext) => jobFolder(id) + n + ending(ext);
+/** 'png' or 'jpg', from the end of a picture's path. What the file really holds is told from its first bytes. */
+export const pictureExt = (path) => (/\.png$/i.test(String(path || '')) ? 'png' : 'jpg');
 
 /** The recipe a job becomes. The same on every device and in the importer, so it is never made twice. */
 export const jobRecipeId = (id) => 'rp' + id;
 export const originalsFolder = (recipeId) => 'originals/' + recipeId + '/';
-export const originalPath = (recipeId, n) => originalsFolder(recipeId) + n + '.jpg';
+export const originalPath = (recipeId, n, ext) => originalsFolder(recipeId) + n + ending(ext);
 
 const MAX_TITLE = 200;
 const typedTitle = (title) => (typeof title === 'string' ? title.replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) : '');
 
 /**
  * The job file for `count` pictures. `kind` says what the pictures are: 'screenshot' or 'photo'.
- * `title` is what the person typed as the recipe's name, if anything.
+ * `title` is what the person typed as the recipe's name, if anything. `exts` may say, picture by
+ * picture, which are 'png'; the rest are JPEG, as everything the app itself sends is.
  */
-export function makeJob({ id, count, at, by, kind, title }) {
+export function makeJob({ id, count, at, by, kind, title, exts, shared }) {
   const images = [];
-  for (let n = 1; n <= count; n++) images.push(picturePath(id, n));
+  for (let n = 1; n <= count; n++) images.push(picturePath(id, n, Array.isArray(exts) ? exts[n - 1] : ''));
   const job = { v: 1, job: 'photos', id, images, at: at || new Date().toISOString(), by: by || '', kind: kind === 'screenshot' ? 'screenshot' : 'photo' };
   if (typedTitle(title)) job.title = typedTitle(title);
+  if (shared === true) job.shared = true;   // it came whole from a Shortcut, and may hold a picture of a note
   return job;
 }
 
@@ -71,12 +94,14 @@ export function readJob(data, path) {
   const named = JOB_FILE.exec(String(path || ''));
   if (!named || !data || typeof data !== 'object' || Array.isArray(data) || data.job !== 'photos') return null;
   const id = named[1];
-  if (data.id !== id || !Array.isArray(data.images) || !data.images.length || data.images.length > MAX_PICTURES) return null;
+  if (data.id !== id || !Array.isArray(data.images) || data.images.length > MAX_JOB_PICTURES) return null;
   for (let i = 0; i < data.images.length; i++) {
     const picture = JOB_PICTURE.exec(String(data.images[i]));
     if (!picture || picture[1] !== id) return null;       // a job may only name pictures in its own folder
   }
   const error = typeof data.error === 'string' ? data.error.trim().slice(0, 300) : '';
+  // No pictures at all is only ever a job that failed for that very reason: what was shared held none.
+  if (!data.images.length && !error) return null;
   return {
     id,
     path: jobPath(id),
@@ -87,10 +112,36 @@ export function readJob(data, path) {
     by: typeof data.by === 'string' ? data.by.slice(0, 60) : '',
     kind: data.kind === 'screenshot' ? 'screenshot' : 'photo',
     title: typedTitle(data.title),   // typed by the person when sending, or empty
+    shared: data.shared === true,    // shared from another app by a Shortcut, not sent from the app's own screen
     pictures: data.images.length,
     images: data.images.map(String),
     tries: Number.isInteger(data.tries) && data.tries > 0 ? data.tries : 0,
   };
+}
+
+/**
+ * Whether a job file that is not an ordinary job is one that was shared whole, with its pictures
+ * inside it. `data` is what the file holds as JSON, or null when it is not JSON at all, which is what
+ * the Send to Recipes Shortcut sends. Only two things are somebody else's and never touched: a job
+ * that names picture files (an ordinary job, or one from a newer version of the app), and a job that
+ * says it is of another kind. Everything else under a job file's name came from a Shortcut, so the
+ * importer unpacks it, or says plainly that it found no picture in it.
+ */
+export function isShared(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return true;
+  if (Array.isArray(data.images)) return false;
+  if (typeof data.job === 'string' && data.job !== 'photos') return false;
+  return true;
+}
+
+/**
+ * What the app shows for a job file that carries its pictures inside it and is waiting to be unpacked
+ * and read. Nothing is known about it but its name, because the app does not download it.
+ */
+export function packedJob(path) {
+  const named = JOB_FILE.exec(String(path || ''));
+  if (!named) return null;
+  return { id: named[1], path: jobPath(named[1]), state: 'waiting', error: '', at: '', asked: '', by: '', kind: 'photo', title: '', pictures: 0, images: [], tries: 0, packed: true };
 }
 
 /** The same job file, marked as not read, with the reason. */

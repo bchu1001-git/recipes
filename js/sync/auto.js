@@ -84,7 +84,8 @@ let unsent = false;
 let timer = null;
 
 // While pictures this device sent are being read, the app looks again every little while, for a few
-// minutes, so the recipe shows up without the person having to ask.
+// minutes, so the recipe shows up without the person having to ask. The same goes for pictures shared
+// from another app by a Shortcut, which is something the person holding this device has just done.
 const POLL_EVERY = 20000;
 const POLL_FOR = 5 * 60000;
 let pollUntil = 0;
@@ -92,7 +93,7 @@ let pollTimer = null;
 
 function ownWaiting() {
   const me = library.config && library.config.device;
-  return (Array.isArray(library.base.jobs) ? library.base.jobs : []).filter((j) => j.state === 'waiting' && j.by === me);
+  return (Array.isArray(library.base.jobs) ? library.base.jobs : []).filter((j) => j.state === 'waiting' && (j.by === me || j.packed));
 }
 
 function schedulePoll() {
@@ -112,6 +113,7 @@ export async function syncNow() {
   let ok = false;
   try {
     const snap = snapshot();
+    const known = new Set((Array.isArray(library.base.jobs) ? library.base.jobs : []).map((j) => j.path + '\n' + j.sha));
     const out = await syncLibrary({
       client: clientFor(library.config), local: snap, base: library.base,
       device: library.config.device, branch: library.config.branch || 'main',
@@ -122,6 +124,8 @@ export async function syncNow() {
     await dropJobActions(out.doneActions);
     // Pictures just went up, or another try was asked for: keep looking for the answer for a while.
     if (snap.queue.some((j) => out.sentJobs.includes(j.id)) || snap.actions.some((a) => a.action === 'retry')) pollUntil = Date.now() + POLL_FOR;
+    // Pictures shared from another app that this device has not seen before: keep looking for those too.
+    if ((out.base.jobs || []).some((j) => j.packed && !known.has(j.path + '\n' + j.sha))) pollUntil = Date.now() + POLL_FOR;
     const toReview = out.recipes.filter((r) => r.review && !snap.seen.has(r.id)).length;
     // Pages from an older script: say so the first time. Pages from the current one: the note is over.
     const scriptNote = out.outdated > 0 && !scriptIsOld();

@@ -2,7 +2,7 @@
 //
 // A reader is a module with a `name` and one function:
 //
-//   read({ pictures: [{ data: Buffer, type: 'image/jpeg' }], kind, key })
+//   read({ pictures: [{ data: Buffer, type: 'image/jpeg' or 'image/png' }], kind, key, shared })
 //     -> { title, titleSuggested, ingredients: [line], steps: [line], notes, time, serves, source, unsure: [line] }
 //
 // `unsure` lists the ingredient lines and steps the reader was not sure it read right, for the review
@@ -51,6 +51,11 @@ export const INSTRUCTION = [
   'If the pictures do not show a recipe, answer with empty text and empty lists.',
 ].join('\n');
 
+// Added to the instruction only for pictures that were shared from another app (see unpack.mjs).
+// A note shared from a notes app comes as its pictures plus one more: a picture of the note itself.
+// Pictures sent from the app's own screen never have such a page, and their instruction stays as it is.
+export const NOTE_PAGE = 'One of the pictures may be a page from a notes app that shows the whole note the other pictures were kept in: a line of text at the top, perhaps a few typed lines, and copies of the other pictures, which may be smaller or cut off at the edge of the page. The line at the top of that page is the name the person gave the recipe: use it as the title. Typed lines on that page that are not part of the ingredients or the method are the person\u2019s own notes: put them in notes. The copies on that page show the same recipe as the other pictures, so read the recipe from the other pictures and do not take the copies as a second lot of ingredients or steps.';
+
 // The model is asked for groups with headings, so that a group never depends on how a heading was
 // printed. read() then writes each heading as a line ending in a colon, which is what a reader returns.
 const text = { type: 'string' };
@@ -77,12 +82,15 @@ function flat(list) {
   return out;
 }
 
-/** The body of the request for these pictures. `thinking` sets how long the model may think first, if given. */
-export function request({ pictures, model = MODEL, thinking = THINKING }) {
+/**
+ * The body of the request for these pictures. `thinking` sets how long the model may think first, if
+ * given. `shared` says the pictures were shared from another app, where one may be a page of a note.
+ */
+export function request({ pictures, model = MODEL, thinking = THINKING, shared = false }) {
   return {
     model,
     ...(thinking ? { generation_config: { thinking_level: thinking } } : {}),
-    system_instruction: INSTRUCTION,
+    system_instruction: shared ? INSTRUCTION + '\n\n' + NOTE_PAGE : INSTRUCTION,
     input: [
       { type: 'text', text: pictures.length === 1 ? 'Here is the picture.' : 'Here are the ' + pictures.length + ' pictures of the one recipe.' },
       ...pictures.map((p) => ({ type: 'image', data: Buffer.from(p.data).toString('base64'), mime_type: p.type || 'image/jpeg' })),
@@ -150,9 +158,9 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * Sends the pictures and returns what was read. `fetch` and `wait` can be swapped for tests.
  * A busy service is asked once more after a pause, and no more than that.
  */
-export async function read({ pictures, key, fetch: send = fetch, model = MODEL, thinking = THINKING, wait = 15000 }) {
+export async function read({ pictures, key, shared = false, fetch: send = fetch, model = MODEL, thinking = THINKING, wait = 15000 }) {
   if (!key) throw new JobError('There is no key for the AI service.');
-  const body = JSON.stringify(request({ pictures, model, thinking }));
+  const body = JSON.stringify(request({ pictures, model, thinking, shared }));
   for (let attempt = 1; ; attempt++) {
     let response;
     try {

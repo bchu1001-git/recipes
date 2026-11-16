@@ -45,11 +45,21 @@ Built and working:
   pointed out. The pictures stay with the recipe afterwards. While
   they are being read the list says so, and if they cannot be read it gives the reason, with Try
   again and Discard. A library is set up for this once, from the steps in Settings, Read photos.
+- Sending pictures from another app. The "Send to Recipes" Shortcut sits in the share sheet. A note
+  that holds pictures of a recipe, or pictures in the photo library, go to the library as one file
+  with the pictures inside it, without a trip through the photo library. The Shortcut has eight
+  actions and nothing in it is put together by hand. The importer unpacks that
+  file and reads it like any other pictures, up to ten at a time. A shared note also brings a picture
+  of the whole note along, which the reader looks at for the recipe's title and for anything typed in
+  the note. The list shows such pictures as being read without downloading them. The Shortcut is made
+  by hand from the steps in Settings, Send from other apps.
 
 Built but not proven: the part of reading pictures that runs inside a library on GitHub. The app, the
 importer and the AI reader have each been run on a computer, the reader on made-up pictures with a
 real key. The workflow that joins them up in a library, and the setup steps for it, are a first try
-that nobody has run yet.
+that nobody has run yet. The same goes for the Send to Recipes Shortcut: the file it sends was built
+on a computer the way the Shortcut would build it and went through the real importer and reader, but
+the Shortcut itself has not run on a phone.
 
 Not built yet, in this order: pasting a link inside the app and importing a bookmarks file, the
 kitchen view with timers, sharing with other people. See [docs/decisions.md](docs/decisions.md) for what was decided and
@@ -129,12 +139,12 @@ on the other. If both changed the same lines it stops and says which files, with
 | `css/app.css` | All styling. Light and dark differ only in the color tokens at the top |
 | `js/model.js` | Data rules with no screen or storage in them: recipes, ingredient lines, headings, timers, search, folders |
 | `js/store.js` | The library on this device, kept in the browser's IndexedDB, with the pictures still waiting to be sent, and which groups are folded away on each recipe's page here |
-| `js/jobs.js` | The rules for a picture job, shared by the app and the importer: its file and folder names, what its file holds, how small a picture is made, and the workflow file a library needs |
+| `js/jobs.js` | The rules for a picture job, shared by the app and the importer: its file and folder names, what its file holds, how small a picture is made, the file a Shortcut shares whole with its pictures inside it, and the workflow file a library needs |
 | `js/sync/` | Syncing: `github.js` (the few GitHub calls), `merge.js` (how two copies become one), `sync.js` (one round, including pages waiting in the inbox and pictures on their way to being read), `auto.js` (when to sync), `originals.js` (fetching the pictures a recipe was read from, and keeping them on the device) |
 | `js/import/` | Reading recipes that come from outside. `page.js` turns the recipe data a web page carries into a recipe waiting for review; syncing uses it for pages in the inbox |
 | `shortcuts/` | `save-page.js`, the script the "Save to Recipes" Shortcut runs on the page open in Safari |
-| `importer/` | What a library runs when pictures arrive, in Node with no packages: `run.mjs` (the command), `jobs.mjs` (works through the waiting jobs), `reading.mjs` (from what was read to a recipe), `git.mjs` (the commit), and `readers/` (the AI reader, `gemini.mjs`, and a stand-in). It uses `js/model.js`, `js/jobs.js`, `js/import/page.js` and `js/sync/merge.js`, so those must stay free of anything only a browser has. The app never loads it |
-| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `photos.js` (choosing pictures to send), `pictures.js` (showing the pictures a recipe was read from), `save.js` (the steps for making the Shortcut and for updating its script), `read.js` (the steps for setting a library up to read pictures), `settings.js`, and helpers in `dom.js` |
+| `importer/` | What a library runs when pictures arrive, in Node with no packages: `run.mjs` (the command), `jobs.mjs` (works through the waiting jobs), `unpack.mjs` (finds the pictures in a file that was shared whole), `reading.mjs` (from what was read to a recipe), `git.mjs` (the commit), and `readers/` (the AI reader, `gemini.mjs`, and a stand-in). It uses `js/model.js`, `js/jobs.js`, `js/import/page.js` and `js/sync/merge.js`, so those must stay free of anything only a browser has. The app never loads it |
+| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `photos.js` (choosing pictures to send), `send.js` (the steps for the Send to Recipes Shortcut), `pictures.js` (showing the pictures a recipe was read from), `save.js` (the steps for making the Shortcut and for updating its script), `read.js` (the steps for setting a library up to read pictures), `settings.js`, and helpers in `dom.js` |
 | `js/sample.js` | Three made-up example recipes |
 | `sw.template.js` | The worker that keeps a copy of the app for offline use. Edit this one |
 | `sw.js`, `js/version.js` | Generated from the template by `scripts/publish.sh` on every publish. Never edit by hand |
