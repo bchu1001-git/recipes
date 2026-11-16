@@ -373,7 +373,7 @@ function minutesOf(node) {
  * "4 servings", "Serves 4" and "4 serving(s)" all become "4", because the recipe page writes "Serves"
  * itself. Anything that says more than a count ("12 cookies", "1 loaf, 10 servings") is kept as written.
  */
-function tidyYield(text) {
+export function tidyYield(text) {
   const rest = text.replace(/^(?:serves|servings?|makes|yields?)\s*:?\s*/i, '').trim();
   const count = /^((?:about\s+|approx\.?\s+|approximately\s+)?\d+(?:\s*(?:-|–|to)\s*\d+)?)\s*(?:servings?|serving\(s\)|serves|portions?|portionen|people|persons?|personen|personnes)\.?$/i.exec(rest);
   return count ? count[1] : rest;

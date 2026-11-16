@@ -8,14 +8,15 @@ How the app is built today, and the plan for the parts that are not built yet. S
 | Piece | Where | State |
 | --- | --- | --- |
 | The app | This public repository, served by GitHub Pages | Built (core screens and To review) |
-| A library | One private repository per library, holding recipes, photos and folders | Built (recipes, folders and the inbox) |
-| The importer | Code in this repository, run by a GitHub Action inside each library | Planned; its web-page reader is built |
-| The AI reader | A free tier outside GitHub, called only by the importer, only for photos | Planned |
-| Shortcuts | "Save to Recipes" and "Recipe Timer", made on each iPhone | Save to Recipes: its page script and the steps for making it are built, and it is still to be tried on a phone. Recipe Timer: planned |
+| A library | One private repository per library, holding recipes, the pictures they were read from, and folders | Built (recipes, folders, the inbox and originals) |
+| The importer | Code in this repository (`importer/`), run by a GitHub Action inside each library | Built for pictures and run on a computer. Its run inside a library on GitHub is still to be proven. Pasted links are planned |
+| The AI reader | A free tier outside GitHub, called only by the importer, only for pictures | Built: Google's Gemini, tried with a real key on made-up pictures. Still to be tried on the owner's own |
+| Shortcuts | "Save to Recipes" and "Recipe Timer", made on each iPhone | Save to Recipes: built, and made and run on an iPhone. Recipe Timer: planned |
 
 Nothing runs on a server owned by this project. A device talks to GitHub Pages for the app's files
 and to `api.github.com` for its library. The page's Content Security Policy in
-`index.html` allows exactly those two.
+`index.html` allows exactly those two. The AI service is called only by the importer, from inside a
+library's workflow, and never by the app.
 
 ## The app today
 
@@ -47,8 +48,11 @@ folders    ["group:folder", ...]
 goto       true for the version that gets cooked
 rating     0 to 5
 photo      path of its photo, or ""
-originals  paths of the screenshots it was read from
+originals  paths of the pictures it was read from, kept in the library
 review     true while it waits under To review
+unsure     lines the AI reader was not sure it read right; only while it waits under To review
+titleSuggested   true when the pictures showed no name and the title was made from other words in
+           them; only while it waits under To review
 created, updated, by
 ```
 
@@ -102,8 +106,10 @@ folders.json   groups and folders, with the time they last changed and the folde
 deleted.json   ids of deleted recipes with the time, so a later sync does not bring them back
 clashes/       a device's version of a recipe that lost to a newer one from another device
 README.md      written by the app when it starts an empty library
-inbox/         pages saved from Safari, waiting to be read at the next sync. Anything else in it is left alone
-photos/, originals/, .github/workflows/import.yml    planned, for photos and the importer
+inbox/         pages saved from Safari and picture jobs, waiting to be read. Anything else in it is left alone
+originals/     the pictures a recipe was read from, in a folder named for the recipe
+.github/workflows/import.yml   runs the importer when pictures arrive. Added once by the owner (Settings, Read photos)
+photos/        planned, for a recipe's own photo
 ```
 
 One file per recipe means two people changing different recipes never collide, and the repository's
@@ -160,10 +166,12 @@ Code: `js/sync/`. `sync.js` and `merge.js` work on plain data, so the tests run 
   runs a short script on the open page, takes the schema.org Recipe data, and writes it into the
   library's `inbox/` as a capture (described below). The app turns that into a recipe itself at its
   next sync, so nothing waits for GitHub and no AI is involved.
-- **Pasted links and photos (planned):** the app writes a small file into `inbox/`. That push starts the library's
-  workflow, which runs the importer from this repository. For a link it fetches the page and reads the
-  same recipe data; for photos it sends the images to the AI reader and gets back a recipe. The result
-  is committed as a recipe with `review: true`.
+- **Photos and screenshots (built; its run inside a library is still to be proven):** the app puts the
+  pictures and a small job file into `inbox/`. That push starts the library's workflow, which runs
+  the importer from this repository. The importer sends the pictures to the AI reader, gets back a
+  recipe, and commits it with `review: true`. See "Reading pictures" below.
+- **Pasted links (planned):** the same route with another kind of job: the importer fetches the page
+  and reads its recipe data with the web-page reader.
 - The AI key is a repository secret in each library, passed to the importer explicitly. Organization
   secrets do not reach private repositories on GitHub's free plan.
 - The reader sits behind one small interface so a different service can replace it.
@@ -267,6 +275,114 @@ It is made by hand on each iPhone. The steps, with the library's own address fil
 button for every piece of text, are in the app: Settings, Save from Safari (`js/ui/save.js`, the
 address `#/save`). The app never shows or copies the key it stores.
 
+### Reading pictures
+
+**The job** (`js/jobs.js`, shared by the app and the importer). One recipe's pictures travel as:
+
+```
+inbox/job-<id>.json     { v: 1, job: 'photos', id, images: [paths], at, by, kind, title }
+inbox/job-<id>/1.jpg    the pictures of one recipe, six at most, in the order they were added
+```
+
+`title` is there only when the person typed one while sending. Pictures of a recipe often leave its
+name out (a screenshot starts part way down the page), so the screen has a Title box, and what is
+typed there always wins over whatever the reader makes of the pictures.
+
+`kind` is `screenshot` or `photo`, guessed from the files chosen (a phone saves screenshots as PNG),
+and becomes the recipe's `source.kind`. The id is twelve random letters and digits made on the device.
+The recipe a job becomes is always `rp<id>`, so neither the app nor the importer can make it twice.
+
+**In the app.** The + button offers "From photos or screenshots" (`js/ui/photos.js`). Pictures come
+in three ways: chosen with the browser's own picker (on an iPhone that offers the photo library, the
+camera and the files), pasted (a Paste button that asks the browser for the clipboard, and the
+ordinary paste as well, so Command-V works), or dropped onto the screen. Every picture offered is
+taken, up to six; anything that is not a picture is passed over, and one line says so. They are shown
+in the order added and each can be removed. There is no reordering: the reader is told the pictures
+may be out of order and overlapping. Each picture is
+drawn onto a canvas and saved as a JPEG with its long edge at 2000 pixels; a tall screenshot keeps
+900 pixels of width instead, so it stays readable (`fitWithin`). The job waits in the device's storage
+(`queue` in `js/store.js`) until a sync has sent it, so a dropped connection loses nothing. `sync.js`
+stores each picture as a blob and adds the pictures and the job file in its usual single commit. A
+second attempt in the same sync does not send a picture again, and a job that is already in the
+library, already read, or read and deleted since, is not sent at all.
+
+**In the library.** `.github/workflows/import.yml` starts on a push that touches `inbox/job-*`. Pages
+saved from Safari have other names and do not start it. It checks out the library and this public
+repository, and runs `node app/importer/run.mjs library` with the AI key from the library's secret
+`GEMINI_API_KEY`. The importer needs Node 20 or later and installs nothing. `workflowText()` in
+`js/jobs.js` writes the file, and the app works out this repository's name from the address it is
+served from (`appRepository()`), so no name is written into this repository.
+
+**The importer** (`importer/`). `jobs.mjs` goes through every waiting job: it checks the pictures,
+hands them to the reader, turns the answer into a recipe with `makeRecipe()` (`reading.mjs`), writes
+`recipes/rp<id>.json` exactly as the app would, moves the pictures to `originals/rp<id>/`, and removes
+the job. `git.mjs` then makes one commit and pushes it; if a device synced in the meantime, the
+commit is put on top of that and pushed again. The rules it keeps:
+
+- One job never stops another. Whatever goes wrong with one is caught and written into that job.
+- A job that could not be read keeps its pictures and gains `error` (a sentence for the person),
+  `failed` (when) and `tries`. The importer then leaves it alone. It is read again only when the
+  person taps Try again in the app, which takes the reason out and so changes the file, which starts
+  the workflow.
+- A job whose recipe already exists, or was deleted since, is only tidied away.
+- A reading with no title, ingredient or step is a failed job ("No recipe could be found"), not an
+  empty recipe.
+- Nothing is invented. What the pictures did not show stays empty, and the answer is treated as
+  untrusted text: it goes through the same cleaning as a saved web page and is capped in size.
+- A file in `inbox/` that is not a picture job it understands is left exactly as it is.
+
+**The reader** (`importer/readers/`). A reader is a module with a `name` and one function:
+
+```
+read({ pictures: [{ data, type }], kind, key })
+  -> { title, ingredients: [line], steps: [line], notes, time, serves, source, unsure: [line] }
+```
+
+`unsure` names the ingredient lines and steps in which something was blurred, cut off, covered or
+could be read two ways. They are kept on the recipe while it waits for review, listed on the review
+screen under the original, and dropped when it is kept. A reader may also say `titleSuggested: true`
+when the pictures showed no name and it made the title from other words in them.
+
+**The title** (`titleOf` in `reading.mjs`). A typed title always wins. Otherwise the reader's title
+is used, with one correction: when a recipe has several groups and the reader gave one group's name
+as the title, which it tends to do when the dish's own name is out of view, the title is made from
+the group names instead ("Roast Squash with Herb Yoghurt") and marked as a suggestion. Group names
+that only say what a part is for ("To serve", "Topping") never make a title. With nothing to go on
+the title stays empty. Either way only words from the pictures are used, and the review screen says
+first of all when the title is missing or only suggested. No time, no servings and no source are
+normal for a picture and are not remarked on.
+
+A group of ingredients or a section of the method is a line of its own ending in a colon, the app's
+rule for a heading. `gemini.mjs` asks Google's Gemini through its Interactions API, with the model
+named in one place (`MODEL`: Google's own name for its newest small, fast model, so it goes on
+working when one model is retired), an instruction to copy what is written and add nothing, and a
+schema for the answer. The instruction covers pictures that overlap or are out of order, a line the
+recipe really has twice, lines whose heading is out of view, a note that sits among the steps, and
+a word that is partly covered. It asks the model for groups with headings and writes the heading lines itself, so a
+group does not depend on how its heading was printed. Nothing is kept on Google's side for a later
+turn (`store: false`). A busy service is asked once more after a pause, and no more. On the free tier
+Google may use what it is sent to improve its products. `fake.mjs` is a stand-in that always "reads"
+the same made-up recipe. `run.mjs` picks the reader by name, so another service can be added beside
+these without touching the rest.
+
+**Back in the app.** Every sync reads the job files in the library (a file that has not changed is
+not downloaded again) and keeps them in `base.jobs`, with `base.originals` (where each kept picture
+is) and `base.reader` (whether the library has the workflow file). The list shows each job: waiting
+to be sent, being read, or not read, with the reason and Try again and Discard. Try again and Discard
+are noted on the device (`actions` in `js/store.js`) and carried out by the next sync. While pictures
+this device sent are being read and the app is open, it syncs every 20 seconds for five minutes
+(`js/sync/auto.js`). When the recipe arrives it is under To review like any other.
+
+**The originals.** The pictures a recipe was read from stay in `originals/<recipe id>/`.
+`js/sync/originals.js` fetches one with the device's key when a screen wants it and keeps a copy on
+the device (in a cache of its own, which the offline worker does not clear), so it also shows with no
+connection. When a recipe is deleted, the sync that sends the deletion removes its pictures too.
+
+**Trying it on a computer.** `node scripts/try-reader.mjs picture.jpg` sends pictures through the
+real reader with the key in `.env`. `scripts/dev-server.mjs` can play the library's part:
+`POST /fake-github/_import` runs the real importer over the stand-in's files with the made-up
+reader, `?real=1` uses the real one, and `?fail=...` makes the reading fail with that reason.
+
 ### To review
 
 A recipe with `review: true` stays out of the list, the search and the folder counts
@@ -279,6 +395,12 @@ page, and a plain sentence for anything that looks missing, worked out from the 
 `reviewNotes`. Under it are the editor's own fields (`recipeFields` in `js/ui/editor.js`), then
 **Keep**, which saves it as an ordinary recipe, and **Discard**, which deletes it after asking. A
 source address is only ever used as a link when `webLink` says it starts with http or https.
+
+A recipe read from pictures has them on top instead (`js/ui/pictures.js`): side by side to swipe
+through, each scrolling inside its box, with a way to see them full size. They are drawn from
+`blob:` addresses, which the page's Content Security Policy allows for images. `reviewNotes` adds a
+reminder that an AI service read it and that amounts and times are worth checking, then the lines
+the reader said it was unsure of. After Keep, the recipe page's menu offers the originals again.
 
 ## Planned: sending a recipe
 
@@ -294,5 +416,6 @@ recipient's "Save to Recipes" Shortcut can save it.
 | Can a Home Screen web app start a Clock timer through a Shortcut? | Proven November 2026 on an iPhone with `proofs/timer.html`: the timer starts and rings with the phone locked. The phone is left in Shortcuts afterwards. Asking Shortcuts to come back opens the page in Safari, not the Home Screen app, so the kitchen view should use the plain link and let the person return |
 | Can a Shortcut read a recipe page and write into a library? | Proven November 2026 on an iPhone with iOS 27: a page shared from Safari arrived under To review. Format Date could not be set up on that phone, so the file is named with a random number, and Show Result is called Show Content there. The page script was also run in a desktop browser on saved copies of ten live recipe pages, with their styles and without their own scripts: the three that group their ingredients gave the right groups, and the seven that do not gave none |
 | Does the web-page reader cope with real recipe pages? | Tested November 2026 on saved copies of one recipe page from each of 23 sites: 22 gave a full recipe; 1 had only the older in-page markup and gave a title and link |
-| Does the free AI reader cope with the owner's own screenshots? | To test |
+| Does the free AI reader cope with the owner's own screenshots? | Tried November 2026 on the owner's own samples, five screenshots of two recipes, on a computer: both came back with every ingredient, step, group and note in place, in two to five seconds, and the same whatever order the pictures were given in. One recipe's name was not in its pictures, and its title was suggested from the names of its two groups. Still to be tried from the owner's phone. The larger Gemini models took minutes on the same pictures, or timed out, so the small one is used. Also tried with a real key on six made-up pictures, sent through the app and the importer on a computer: a recipe-site screenshot, a social media caption, a photographed cookbook page with two groups of ingredients, a recipe over two overlapping screenshots, and a page with no recipe. Each recipe came back complete in two to three seconds, with nothing added, the groups as headings, and the overlap read once; the page with no recipe became a failed job. A half written as one character sometimes came back as 1/2. A seventh picture, a recipe card with a stain over one amount, two steps running off its edge and one blurred step, came back with the cut-off words left cut off and those four lines named as unsure |
+| Does the importer run inside a library on GitHub? | To test, with the steps in Settings, Read photos. The workflow file has been checked as text only: nobody has run it |
 | Does syncing work against real GitHub? | Proven November 2026: an iPhone connected to an empty private library and synced |

@@ -201,6 +201,15 @@ export function renderSettings(root) {
           library.config ? h('a', { class: 'btn btn-quiet', href: '#/save' }, 'Set up or update Save to Recipes') : null),
 
         h('section', { class: 'set' },
+          h('h2', { class: 'label', text: 'Read photos' }),
+          h('p', { class: 'set-note', text: !library.config
+            ? 'A recipe can be read out of a screenshot or a photo. The reading happens in your library, so connect a library first.'
+            : library.base.reader === true
+              ? 'This library reads recipes out of screenshots and photos. Tap + on the list, then From photos or screenshots.'
+              : 'A recipe can be read out of a screenshot or a photo. The library needs setting up for it once.' }),
+          library.config ? h('a', { class: 'btn btn-quiet', href: '#/read' }, library.base.reader === true ? 'See the Read photos setup' : 'Set up Read photos') : null),
+
+        h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Backup' }),
           h('p', { class: 'set-note', text: 'One file with every recipe and folder in it.' }),
           h('div', { class: 'set-buttons' },

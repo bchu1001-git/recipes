@@ -1,18 +1,21 @@
 // Checking a recipe that arrived from outside before it joins the others. The original stays on top:
-// where it came from, a way to open it, and what looks missing. Under it are the same fields as the
-// editor, then Keep or Discard.
+// where it came from and a way to open it, or the pictures it was read from, and what looks missing.
+// Under it are the same fields as the editor, then Keep or Discard.
 
 import { h, icon, confirmSheet, toast, go } from './dom.js';
 import { state, subscribe, saveRecipe, deleteRecipe } from '../store.js';
 import { setUi } from './state.js';
 import { webLink, reviewNotes, waitingRecipes } from '../model.js';
 import { recipeFields } from './editor.js';
+import { pictureStrip, openPictures } from './pictures.js';
 
 export function renderReview(root, id) {
   const recipe = state.recipes.get(id);
   const fields = recipeFields(recipe);
   const link = webLink(recipe.source.url);
   const notes = reviewNotes(recipe);
+  const pictures = (Array.isArray(recipe.originals) ? recipe.originals : []).filter((path) => typeof path === 'string');
+  const strip = pictures.length ? pictureStrip(pictures) : null;
   let busy = false;
 
   // After this one is kept or discarded: the next one waiting, or the list.
@@ -34,7 +37,8 @@ export function renderReview(root, id) {
     const input = fields.read(form);
     if (!input || busy) return;
     busy = true;
-    await saveRecipe({ ...input, review: false });
+    const { unsure, titleSuggested, ...checked } = input;   // what the reader was unsure of has now been looked at
+    await saveRecipe({ ...checked, review: false });
     toast('Kept');
   } },
     h('div', { class: 'review-top' },
@@ -44,8 +48,12 @@ export function renderReview(root, id) {
         h('button', { class: 'bar-save', type: 'submit' }, 'Keep')),
       h('div', { class: 'review-origin' },
         h('span', { class: 'label', text: 'Original' }),
-        h('span', { class: 'review-origin-name', text: recipe.source.name || 'A web page' }),
-        link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, 'Open the page') : null)),
+        h('span', { class: 'review-origin-name', text: recipe.source.name
+          || (!pictures.length ? 'A web page' : pictures.length === 1 ? 'One picture' : pictures.length + ' pictures, side by side') }),
+        link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, 'Open the page') : null,
+        pictures.length ? h('button', { class: 'review-origin-more', type: 'button', onclick: () => openPictures(pictures) },
+          pictures.length > 1 ? 'All ' + pictures.length + ', larger' : 'Larger') : null),
+      strip ? strip.node : null),
     notes.length ? h('div', { class: 'review-notes', role: 'note' }, notes.map((text) => h('p', { text }))) : null,
     h('div', { class: 'editor' },
       fields.nodes,
@@ -66,5 +74,5 @@ export function renderReview(root, id) {
       else go('r/' + id);
     }
   });
-  return () => { stop(); setUi({ openId: null }); };
+  return () => { stop(); if (strip) strip.stop(); setUi({ openId: null }); };
 }

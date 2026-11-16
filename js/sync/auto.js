@@ -2,7 +2,7 @@
 // Rhythm: when the app opens, a few seconds after a change, when the app is left, when it comes back
 // after an hour or after a failure, and whenever asked.
 
-import { library, subscribe, snapshot, applySync, saveBase, saveLibrary, forgetLibrary } from '../store.js';
+import { state, library, subscribe, snapshot, applySync, saveBase, saveLibrary, forgetLibrary, dropQueued, dropJobActions } from '../store.js';
 import { createClient, GitHubError } from './github.js';
 import { syncLibrary } from './sync.js';
 
@@ -47,6 +47,26 @@ function clientFor(config) {
   return createClient({ owner: config.owner, repo: config.repo, token: config.token, api: apiBase() });
 }
 
+/** The client for the connected library, or null. For the few things outside a sync, such as fetching a picture. */
+export function currentClient() {
+  return library.config ? clientFor(library.config) : null;
+}
+
+/**
+ * The picture jobs to show: the ones still waiting on this device to be sent ('queued'), then the ones
+ * in the library that are being read ('waiting') or could not be read ('failed'). A job the person has
+ * discarded is hidden straight away; one they asked to be tried again shows as waiting.
+ */
+export function jobsNow() {
+  const asked = new Map(state.actions.map((a) => [a.id, a.action]));
+  const queued = state.queue.map((j) => ({ id: j.id, state: 'queued', error: '', at: j.at, by: j.by, title: j.title || '', pictures: j.pictures.length }));
+  const mine = new Set(queued.map((j) => j.id));
+  const there = (library.config && Array.isArray(library.base.jobs) ? library.base.jobs : [])
+    .filter((j) => !mine.has(j.id) && asked.get(j.id) !== 'discard')
+    .map((j) => (asked.get(j.id) === 'retry' ? { ...j, state: 'waiting', error: '', pending: true } : j));
+  return [...queued, ...there];
+}
+
 /** Turns an error into a sentence someone can act on. */
 export function explain(err) {
   if (err instanceof GitHubError) {
@@ -62,6 +82,24 @@ let running = false;
 let again = false;
 let unsent = false;
 let timer = null;
+
+// While pictures this device sent are being read, the app looks again every little while, for a few
+// minutes, so the recipe shows up without the person having to ask.
+const POLL_EVERY = 20000;
+const POLL_FOR = 5 * 60000;
+let pollUntil = 0;
+let pollTimer = null;
+
+function ownWaiting() {
+  const me = library.config && library.config.device;
+  return (Array.isArray(library.base.jobs) ? library.base.jobs : []).filter((j) => j.state === 'waiting' && j.by === me);
+}
+
+function schedulePoll() {
+  clearTimeout(pollTimer);
+  if (!library.config || Date.now() > pollUntil || !ownWaiting().length) return;
+  pollTimer = setTimeout(() => { if (document.visibilityState === 'visible') syncNow(); }, POLL_EVERY);
+}
 
 /** Syncs now. Resolves true when it worked. If a sync is already running, another follows it. */
 export async function syncNow() {
@@ -80,6 +118,10 @@ export async function syncNow() {
     });
     await applySync(out, snap);
     await saveBase(out.base);
+    await dropQueued(out.sentJobs);
+    await dropJobActions(out.doneActions);
+    // Pictures just went up, or another try was asked for: keep looking for the answer for a while.
+    if (snap.queue.some((j) => out.sentJobs.includes(j.id)) || snap.actions.some((a) => a.action === 'retry')) pollUntil = Date.now() + POLL_FOR;
     const toReview = out.recipes.filter((r) => r.review && !snap.seen.has(r.id)).length;
     // Pages from an older script: say so the first time. Pages from the current one: the note is over.
     const scriptNote = out.outdated > 0 && !scriptIsOld();
@@ -93,6 +135,7 @@ export async function syncNow() {
   }
   running = false;
   if (again) { again = false; return syncNow(); }
+  if (ok) schedulePoll();
   return ok;
 }
 
@@ -110,6 +153,7 @@ export async function connect({ owner, repo, token, device }) {
 /** Forgets the library and the key. The recipes stay on this device. */
 export async function disconnect() {
   clearTimeout(timer);
+  clearTimeout(pollTimer);
   await forgetLibrary();
   set({ state: 'off', at: null, message: '', sent: 0, received: 0, toReview: 0, scriptNote: false });
 }
@@ -121,8 +165,8 @@ export function startAutoSync() {
     if (document.visibilityState === 'hidden') {
       hiddenAt = Date.now();
       if (unsent) syncNow();
-    } else if (status.state === 'error' || (hiddenAt && Date.now() - hiddenAt > 60 * 60 * 1000)) {
-      syncNow();
+    } else if (status.state === 'error' || (hiddenAt && Date.now() - hiddenAt > 60 * 60 * 1000) || ownWaiting().length) {
+      syncNow();   // also when pictures are being read: the answer may have arrived meanwhile
     }
   });
   addEventListener('online', () => { if (library.config && status.state === 'error') syncNow(); });
@@ -133,6 +177,9 @@ export function startAutoSync() {
     timer = setTimeout(syncNow, 8000);
   });
   if (library.config) {
+    // Pictures sent a short while ago, before the app was closed, may still be on their way back.
+    const recent = ownWaiting().map((j) => Date.parse(j.at)).filter((t) => Number.isFinite(t) && Date.now() - t < 2 * POLL_FOR);
+    if (recent.length) pollUntil = Date.now() + POLL_FOR;
     set({ state: 'idle' });
     syncNow();
   }

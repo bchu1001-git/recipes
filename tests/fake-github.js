@@ -4,13 +4,14 @@
 import { createHash } from 'node:crypto';
 
 const sha1 = (bytes) => createHash('sha1').update(bytes).digest('hex');
-const blobSha = (text) => {
-  const body = Buffer.from(text, 'utf8');
+const bytesOf = (content) => (Buffer.isBuffer(content) ? content : Buffer.from(String(content), 'utf8'));
+const blobSha = (content) => {
+  const body = bytesOf(content);
   return sha1(Buffer.concat([Buffer.from('blob ' + body.length + '\0'), body]));
 };
 
 export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true } = {}) {
-  const blobs = new Map();    // hash -> text
+  const blobs = new Map();    // hash -> the file's bytes (text and pictures alike)
   const trees = new Map();    // hash -> Map<path, blob hash>
   const commits = new Map();  // hash -> { tree, parents, message }
   let head = null;
@@ -27,11 +28,25 @@ export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true }
     commits.set(sha, { tree, parents, message });
     return sha;
   }
-  function write(path, text, message) {
+  function keep(content) {
+    const body = bytesOf(content);
+    const sha = blobSha(body);
+    blobs.set(sha, body);
+    return sha;
+  }
+  /** Writes one file (text or a Buffer), or removes it when `content` is null, as a commit of its own. */
+  function write(path, content, message) {
     const files = new Map(head ? trees.get(commits.get(head).tree) : []);
-    if (text === null) files.delete(path);
-    else { const sha = blobSha(text); blobs.set(sha, text); files.set(path, sha); }
+    if (content === null) files.delete(path);
+    else files.set(path, keep(content));
     head = saveCommit(saveTree(files), head ? [head] : [], message);
+    return head;
+  }
+  /** Replaces everything on the main branch with `files` (path -> text or Buffer), as one commit. */
+  function replaceAll(files, message) {
+    const next = new Map();
+    for (const [path, content] of files) next.set(path, keep(content));
+    head = saveCommit(saveTree(next), head ? [head] : [], message);
     return head;
   }
   if (!empty) write('README.md', '# library\n', 'Initial commit');
@@ -50,19 +65,26 @@ export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true }
     }
     if (method === 'GET' && (m = /^\/git\/trees\/(\w+)\?recursive=1$/.exec(path))) {
       const t = trees.get(m[1]);
-      return t ? [200, { tree: [...t].map(([p, sha]) => ({ path: p, type: 'blob', sha, size: Buffer.byteLength(blobs.get(sha), 'utf8') })) }] : [404, { message: 'Not Found' }];
+      return t ? [200, { tree: [...t].map(([p, sha]) => ({ path: p, type: 'blob', sha, size: blobs.get(sha).length })) }] : [404, { message: 'Not Found' }];
     }
     if (method === 'GET' && (m = /^\/git\/blobs\/(\w+)$/.exec(path))) {
-      const text = blobs.get(m[1]);
-      return text === undefined ? [404, { message: 'Not Found' }] : [200, { encoding: 'base64', content: Buffer.from(text, 'utf8').toString('base64') }];
+      const body = blobs.get(m[1]);
+      return body === undefined ? [404, { message: 'Not Found' }] : [200, { encoding: 'base64', content: body.toString('base64') }];
+    }
+    // "Create a blob": how a picture gets in, ahead of the commit that names it.
+    if (method === 'POST' && path === '/git/blobs') {
+      if (!canWrite) return [403, { message: 'Resource not accessible by personal access token' }];
+      if (!body || typeof body.content !== 'string') return [422, { message: 'Invalid request.' }];
+      return [201, { sha: keep(body.encoding === 'base64' ? Buffer.from(body.content, 'base64') : body.content) }];
     }
     if (method === 'POST' && path === '/git/trees') {
       if (!head) return [409, { message: 'Git Repository is empty.' }];
       const files = new Map(trees.get(body.base_tree));
       for (const e of body.tree) {
         if (e.sha === null) files.delete(e.path);
-        else if (typeof e.content === 'string') { const sha = blobSha(e.content); blobs.set(sha, e.content); files.set(e.path, sha); }
-        else files.set(e.path, e.sha);
+        else if (typeof e.content === 'string') files.set(e.path, keep(e.content));
+        else if (blobs.has(e.sha)) files.set(e.path, e.sha);
+        else return [422, { message: 'tree.sha ' + e.sha + ' is not a valid blob' }];
       }
       return [201, { sha: saveTree(files) }];
     }
@@ -80,7 +102,7 @@ export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true }
       if (!body || typeof body.content !== 'string' || !body.message) return [422, { message: 'Invalid request.' }];
       // Like GitHub, it refuses to replace a file unless the call names the version being replaced.
       if (head && trees.get(commits.get(head).tree).has(m[1]) && !body.sha) return [422, { message: 'Invalid request.\n\n"sha" wasn\'t supplied.' }];
-      write(m[1], Buffer.from(body.content, 'base64').toString('utf8'), body.message);
+      write(m[1], Buffer.from(body.content, 'base64'), body.message);
       return [201, { content: { name: m[1].split('/').pop(), path: m[1] }, commit: { sha: head } }];
     }
     return [404, { message: 'Not Found' }];
@@ -97,9 +119,16 @@ export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true }
     /** The files on the main branch as Map<path, text>. */
     files() {
       const out = new Map();
+      if (head) for (const [p, sha] of trees.get(commits.get(head).tree)) out.set(p, blobs.get(sha).toString('utf8'));
+      return out;
+    },
+    /** The files on the main branch as Map<path, Buffer>, for the ones that are not text. */
+    snapshot() {
+      const out = new Map();
       if (head) for (const [p, sha] of trees.get(commits.get(head).tree)) out.set(p, blobs.get(sha));
       return out;
     },
+    replaceAll,
     history() {
       const out = [];
       for (let c = head; c; c = commits.get(c).parents[0]) out.push(commits.get(c).message);

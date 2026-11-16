@@ -293,14 +293,31 @@ export function reviewNotes(recipe) {
   // Headings ("For the salsa:") are neither ingredients nor steps.
   const steps = (recipe.steps || []).filter((s) => !isHeading(s.text));
   const ingredients = (recipe.ingredients || []).filter((i) => !isHeading(i.text));
+  const pictures = !!recipe.source && (recipe.source.kind === 'photo' || recipe.source.kind === 'screenshot');
+
+  // The title first. Pictures of a recipe often leave its name out, which is nothing to worry about:
+  // it only has to be typed in, or checked when it was made from other words in the pictures.
+  if (!recipe.title) notes.push(pictures ? 'The pictures show no name for this recipe. Type its title in below.' : 'No title was found. Type one in below.');
+  else if (recipe.titleSuggested === true) notes.push('The pictures show no name for this recipe. The title is a suggestion made from words in them, so check it.');
+
+  // Read from pictures by the AI reader: it copies well, but a half can come out as a third.
+  if (pictures && (ingredients.length || steps.length)) notes.push('This was read from the pictures by an AI service. Check the amounts and times against the original.');
+  // The lines the reader said it was not sure of, for as long as the recipe waits for review.
+  const unsure = (Array.isArray(recipe.unsure) ? recipe.unsure : []).filter((line) => typeof line === 'string' && line.trim()).slice(0, 40);
+  if (unsure.length) {
+    notes.push(unsure.length === 1 ? 'The reader was not sure it read this line right:' : 'The reader was not sure it read these lines right:');
+    for (const line of unsure) notes.push('\u2022 ' + line.trim());
+  }
+
   if (!ingredients.length && !steps.length) {
-    notes.push('No recipe was found on the page. Open it and type or paste the recipe here, or discard this.');
+    notes.push(pictures
+      ? 'No recipe could be read from the pictures. Type it in here from the original above, or discard this.'
+      : 'No recipe was found on the page. Open it and type or paste the recipe here, or discard this.');
   } else {
     if (!ingredients.length) notes.push('No ingredients were found.');
     if (!steps.length) notes.push('No steps were found.');
     else if (steps.length === 1 && steps[0].text.length > 400) notes.push('The steps came as one block of text. Put each step on its own line.');
   }
-  if (!recipe.title) notes.push('No title was found.');
   return notes;
 }
 

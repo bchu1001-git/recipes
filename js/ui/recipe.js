@@ -5,14 +5,19 @@ import { h, icon, sheet, confirmSheet, go, toast, paintChip } from './dom.js';
 import { state, subscribe, saveRecipe, deleteRecipe, foldsFor, setFold } from '../store.js';
 import { ui, setUi, ticksFor } from './state.js';
 import { amountLabel, itemLabel, formatMinutes, folderIndex, webLink, partsOf } from '../model.js';
+import { openPictures } from './pictures.js';
 
 const TABS = [['ing', 'Ingredients'], ['steps', 'Steps'], ['notes', 'Notes']];
 
 function menu(recipe) {
+  // The pictures a recipe was read from stay with it, for checking an amount against later.
+  const pictures = (Array.isArray(recipe.originals) ? recipe.originals : []).filter((path) => typeof path === 'string');
   sheet(recipe.title, (close) => [
     h('div', { class: 'actions' },
       h('a', { class: 'action', href: '#/edit/' + recipe.id, onclick: close }, 'Edit'),
       h('button', { class: 'action', type: 'button', onclick: () => { close(); folderPicker(recipe.id); } }, 'Folders'),
+      pictures.length ? h('button', { class: 'action', type: 'button', onclick: () => { close(); openPictures(pictures); } },
+        pictures.length === 1 ? 'See the original picture' : 'See the original pictures') : null,
       h('button', { class: 'action is-danger', type: 'button', onclick: async () => {
         close();
         const yes = await confirmSheet('Delete this recipe?', '"' + recipe.title + '" will be removed from this device. This can’t be undone.', 'Delete');

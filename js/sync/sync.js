@@ -4,6 +4,10 @@
 import { gitBlobSha } from './hash.js';
 import { mergeLibraries, serializeRecipe, serializeFolders, serializeDeleted, recipePath, recipeIdOf } from './merge.js';
 import { recipeFromCapture, SCRIPT_VERSION } from '../import/page.js';
+import {
+  JOB_FILE, ORIGINAL, WORKFLOW_PATH, MAX_PICTURES, jobPath, jobFolder, picturePath, jobRecipeId,
+  makeJob, serializeJob, readJob, retriedJob,
+} from '../jobs.js';
 
 const FOLDERS = 'folders.json';
 const DELETED = 'deleted.json';
@@ -23,11 +27,12 @@ function parse(text, path) {
   throw new Error('A file in the library could not be read: ' + path);
 }
 
-function describe(device, changed, removed, other, added, cleared) {
+function describe(device, changed, removed, other, added, cleared, extra = []) {
   const parts = [];
   if (changed) parts.push(changed + (changed === 1 ? ' recipe changed' : ' recipes changed'));
   if (removed) parts.push(removed + (removed === 1 ? ' recipe removed' : ' recipes removed'));
   if (added) parts.push(added + ' new from the inbox');
+  parts.push(...extra);
   if (!parts.length && other) parts.push('folders updated');
   if (!parts.length && cleared) parts.push('inbox cleared');
   return (device || 'A device') + ': ' + (parts.join(', ') || 'library updated');
@@ -65,7 +70,7 @@ function captureTime(at, now) {
 async function readInbox({ client, files, sizes, known, taken, now }) {
   const out = { recipes: [], done: [], left: {}, outdated: 0 };
   for (const [path, sha] of files) {
-    if (!INBOX.test(path)) continue;
+    if (!INBOX.test(path) || JOB_FILE.test(path)) continue;   // picture jobs are looked at by readJobs
     if (known[path] === sha || (sizes.get(path) || 0) > INBOX_MAX) { out.left[path] = sha; continue; }
     let text;
     try {
@@ -96,16 +101,49 @@ async function readInbox({ client, files, sizes, known, taken, now }) {
 }
 
 /**
- * local:  { recipes: [recipe], folders, deleted }   as this device has them now
- * base:   { head, files: { path: hash }, inbox }    as of the last successful sync, or {}
+ * The picture jobs waiting in the library, as the app shows them: [{ id, path, sha, state, error, at,
+ * by, kind, pictures, raw }]. A job file that has not changed since the last sync is not downloaded
+ * again. One that cannot be fetched or read is passed over this time.
+ */
+async function readJobs({ client, files, known }) {
+  const before = new Map((Array.isArray(known) ? known : []).map((j) => [j.path + '\n' + j.sha, j]));
+  const jobs = [];
+  for (const [path, sha] of files) {
+    if (!JOB_FILE.test(path)) continue;
+    const same = before.get(path + '\n' + sha);
+    if (same) { jobs.push(same); continue; }
+    let data = null;
+    try {
+      data = JSON.parse(await client.blob(sha));
+    } catch (err) {
+      if (err.status === 0 || err.status === 401) throw err;
+      continue;
+    }
+    const job = readJob(data, path);
+    if (job) jobs.push({ ...job, sha, raw: data });
+  }
+  return jobs;
+}
+
+/**
+ * local:  { recipes: [recipe], folders, deleted, queue, actions }   as this device has them now
+ * base:   { head, files: { path: hash }, inbox, jobs }              as of the last successful sync, or {}
+ *
+ * `queue` holds picture jobs this device has yet to send: [{ id, at, by, kind, title, pictures: [base64] }].
+ * `actions` holds what the person asked to be done with a job in the library: [{ id, action }], where
+ * action is 'retry' or 'discard'.
  *
  * Returns the merged library, the new base, how many recipes changed on each side, `added`: how many
- * recipes were made from pages waiting in the inbox, and `outdated`: how many of those pages were saved
- * by a Shortcut whose page script is older than this app expects.
+ * recipes were made from pages waiting in the inbox, `outdated`: how many of those pages were saved
+ * by a Shortcut whose page script is older than this app expects, `sentJobs`: the queued jobs that are
+ * now in the library (or no longer needed), and `doneActions`: the actions that have been carried out.
+ * The new base also holds `jobs` (the picture jobs in the library), `originals` (path -> hash of every
+ * picture a recipe was read from) and `reader` (whether the library has the workflow that reads them).
  * Changes made on GitHub by someone else while this runs are picked up by trying again.
  */
 export async function syncLibrary({ client, local, base = {}, device = '', branch = 'main', now = new Date().toISOString() }) {
   const known = base.inbox && base.inbox.rules === INBOX_RULES ? base.inbox.left || {} : {};
+  const uploaded = new Map();   // pictures already stored by this sync, so that a second attempt does not send them again
 
   for (let attempt = 1; attempt <= 4; attempt++) {
     let head = await client.head(branch);
@@ -185,9 +223,68 @@ export async function syncLibrary({ client, local, base = {}, device = '', branc
     // The pages that were read leave the inbox in the same commit that adds their recipes.
     for (const path of inbox.done) entries.push({ path, mode: '100644', type: 'blob', sha: null });
 
+    // Picture jobs. First the ones this device has yet to send: the pictures and the job file go up
+    // together, which is what starts the library's importer.
+    let jobs = await readJobs({ client, files: theirFiles, known: base.jobs });
+    const sentJobs = [];
+    const doneActions = [];
+    const extra = [];
+    let pictures = 0;
+    for (const queued of local.queue || []) {
+      const path = jobPath(queued.id);
+      const recipeId = jobRecipeId(queued.id);
+      const count = Math.min((queued.pictures || []).length, MAX_PICTURES);
+      const data = makeJob({ id: queued.id, count, at: queued.at, by: queued.by || device, kind: queued.kind, title: queued.title });
+      const job = count ? readJob(data, path) : null;
+      // Already in the library, already read, read and deleted since, or not a job at all: nothing to send.
+      if (!job || theirFiles.has(path) || merged.recipes.has(recipeId) || recipeId in merged.deleted) { sentJobs.push(queued.id); continue; }
+      for (let n = 1; n <= count; n++) {
+        const mark = queued.id + '/' + n;
+        if (!uploaded.has(mark)) uploaded.set(mark, await client.createBlob(queued.pictures[n - 1]));
+        entries.push({ path: picturePath(queued.id, n), mode: '100644', type: 'blob', sha: uploaded.get(mark) });
+      }
+      const text = serializeJob(data);
+      entries.push({ path, mode: '100644', type: 'blob', content: text });
+      jobs.push({ ...job, sha: await gitBlobSha(text), raw: data });
+      sentJobs.push(queued.id);
+      pictures += count;
+    }
+    if (pictures) extra.push(pictures + (pictures === 1 ? ' picture' : ' pictures') + ' sent to be read');
+
+    // Then what the person asked for: another try at a job, or throwing one away with its pictures.
+    for (const asked of local.actions || []) {
+      const job = jobs.find((j) => j.id === asked.id);
+      if (job && asked.action === 'retry' && !sentJobs.includes(job.id)) {
+        const data = { ...retriedJob(job.raw), asked: now };   // the changed file is what starts the importer again
+        const text = serializeJob(data);
+        const again = readJob(data, job.path);
+        if (again) {
+          entries.push({ path: job.path, mode: '100644', type: 'blob', content: text });
+          const sha = await gitBlobSha(text);
+          jobs = jobs.map((j) => (j === job ? { ...again, sha, raw: data } : j));
+          extra.push('another try at reading pictures');
+        }
+      } else if (job && asked.action === 'discard' && !sentJobs.includes(job.id)) {
+        entries.push({ path: job.path, mode: '100644', type: 'blob', sha: null });
+        for (const path of theirFiles.keys()) if (path.startsWith(jobFolder(job.id))) entries.push({ path, mode: '100644', type: 'blob', sha: null });
+        jobs = jobs.filter((j) => j !== job);
+        extra.push('pictures discarded');
+      }
+      doneActions.push(asked.id);
+    }
+
+    // The pictures a recipe was read from are kept beside it, and go when the recipe has been deleted.
+    const originals = {};
+    for (const [path, sha] of theirFiles) {
+      const picture = ORIGINAL.exec(path);
+      if (!picture) continue;
+      if (!merged.recipes.has(picture[1]) && picture[1] in merged.deleted) entries.push({ path, mode: '100644', type: 'blob', sha: null });
+      else originals[path] = sha;
+    }
+
     let commit = head.commit;
     if (entries.length) {
-      const message = describe(device, sentChanged - added, sentRemoved, other, added, inbox.done.length);
+      const message = describe(device, sentChanged - added, sentRemoved, other, added, inbox.done.length, extra);
       commit = await client.commit({ parent: head.commit, tree: head.tree, entries, message });
       try {
         await client.move(branch, commit);
@@ -201,11 +298,16 @@ export async function syncLibrary({ client, local, base = {}, device = '', branc
       recipes: [...merged.recipes.values()],
       folders: merged.folders,
       deleted: merged.deleted,
-      base: { head: commit, files, inbox: { rules: INBOX_RULES, left: inbox.left } },
+      base: {
+        head: commit, files, inbox: { rules: INBOX_RULES, left: inbox.left },
+        jobs, originals, reader: theirFiles.has(WORKFLOW_PATH),
+      },
       sent: sentChanged + sentRemoved,
       received,
       added,
       outdated: inbox.outdated,
+      sentJobs,
+      doneActions,
     };
   }
   throw new Error('The library kept changing while syncing. Try again in a moment.');

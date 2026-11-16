@@ -12,12 +12,14 @@ export const state = {
   folders: { ...starterFolders(), updated: EPOCH, deleted: {} },
   deleted: {},        // recipe id -> when it was deleted, so a later sync doesn't bring it back
   saved: true,        // false when this browser can't store data (for example a private window)
+  queue: [],          // picture jobs waiting to be sent: [{ id, at, by, kind, title, pictures: [base64] }]
+  actions: [],        // what was asked of a job already in the library: [{ id, action: 'retry' | 'discard' }]
 };
 
 /** Which library this device syncs with, and what it looked like at the last sync. */
 export const library = {
   config: null,       // { owner, repo, token, device, branch } or null when not connected
-  base: {},           // { head, files: { path: hash } }
+  base: {},           // { head, files: { path: hash }, inbox, jobs, originals, reader }
 };
 
 // How the recipe page is folded on this device: recipe id -> the groups folded away on its page.
@@ -81,6 +83,10 @@ export async function init() {
     library.base = (await getMeta('base')) || {};
     const folded = await getMeta('folds');
     if (folded && typeof folded === 'object' && !Array.isArray(folded)) folds = folded;
+    const queue = await getMeta('queue');
+    if (Array.isArray(queue)) state.queue = queue.filter((j) => j && j.id && Array.isArray(j.pictures));
+    const actions = await getMeta('jobActions');
+    if (Array.isArray(actions)) state.actions = actions.filter((a) => a && a.id && a.action);
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   } catch (err) {
     db = null;
@@ -191,6 +197,39 @@ export async function importAll(data) {
   return added;
 }
 
+// ---------- pictures waiting to be read ----------
+
+/** Keeps a picture job on this device until a sync has sent it, so a dropped connection loses nothing. */
+export async function queueJob(job) {
+  state.queue = [...state.queue, job];
+  changed();
+  await putMeta('queue', state.queue);
+}
+
+/** Forgets queued jobs: the ones a sync has sent, or one the person changed their mind about. */
+export async function dropQueued(ids) {
+  const gone = new Set(ids);
+  if (!state.queue.some((j) => gone.has(j.id))) return;
+  state.queue = state.queue.filter((j) => !gone.has(j.id));
+  changed('sync');
+  await putMeta('queue', state.queue);
+}
+
+/** Notes what to do with a job that is already in the library. The next sync carries it out. */
+export async function askOfJob(id, action) {
+  state.actions = [...state.actions.filter((a) => a.id !== id), { id, action }];
+  changed();
+  await putMeta('jobActions', state.actions);
+}
+
+export async function dropJobActions(ids) {
+  const done = new Set(ids);
+  if (!state.actions.some((a) => done.has(a.id))) return;
+  state.actions = state.actions.filter((a) => !done.has(a.id));
+  changed('sync');
+  await putMeta('jobActions', state.actions);
+}
+
 // ---------- syncing ----------
 
 export async function saveLibrary(config) {
@@ -204,12 +243,14 @@ export async function saveLibrary(config) {
 export async function forgetLibrary() {
   library.config = null;
   library.base = {};
-  await run('meta', 'readwrite', (s) => { s.delete('library'); s.delete('base'); });
+  state.actions = [];   // they were about jobs in that library
+  await run('meta', 'readwrite', (s) => { s.delete('library'); s.delete('base'); s.delete('jobActions'); });
   changed('sync');
 }
 
 export async function saveBase(base) {
   library.base = base;
+  changed('sync');   // the picture jobs shown on the list come from here
   await putMeta('base', base);
 }
 
@@ -222,6 +263,8 @@ export function snapshot() {
     deleted: { ...state.deleted },
     seen: new Map(recipes.map((r) => [r.id, r.updated])),
     foldersAt: state.folders.updated,
+    queue: [...state.queue],
+    actions: [...state.actions],
   };
 }
 

@@ -11,7 +11,7 @@ import { scriptIsOld } from '../sync/auto.js';
 
 const SCRIPT = 'shortcuts/save-page.js';
 
-async function copy(text) {
+export async function copy(text) {
   try {
     await navigator.clipboard.writeText(text);
     toast('Copied');
@@ -27,16 +27,16 @@ async function copy(text) {
 }
 
 /** A piece of text to paste into the Shortcut, with a button that copies it. */
-function piece(text, label) {
+export function piece(text, label) {
   return h('span', { class: 'copy' },
     h('span', { class: 'copy-text', text }),
     h('button', { class: 'copy-btn', type: 'button', 'aria-label': 'Copy ' + (label || text), onclick: () => copy(text) }, 'Copy'));
 }
 
-const b = (text) => h('b', { text });
-const p = (...kids) => h('p', null, ...kids);
-const note = (...kids) => h('p', { class: 'set-note' }, ...kids);
-const step = (title, ...kids) => h('li', { class: 'howto-step' }, h('h3', { text: title }), ...kids);
+export const b = (text) => h('b', { text });
+export const p = (...kids) => h('p', null, ...kids);
+export const note = (...kids) => h('p', { class: 'set-note' }, ...kids);
+export const step = (title, ...kids) => h('li', { class: 'howto-step' }, h('h3', { text: title }), ...kids);
 
 export function renderSaveSetup(root) {
   let script = null;      // the page script, once it has loaded

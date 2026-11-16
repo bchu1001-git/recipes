@@ -2,9 +2,9 @@
 // On a wide window the same filters also appear as a sidebar.
 // Recipes that arrived from outside wait under "To review" until they are kept or discarded.
 
-import { h, icon, sheet, go, paintChip } from './dom.js';
-import { state, library, subscribe, saveRecipe } from '../store.js';
-import { status, onStatus, syncNow, ago } from '../sync/auto.js';
+import { h, icon, sheet, confirmSheet, go, paintChip } from './dom.js';
+import { state, library, subscribe, saveRecipe, askOfJob, dropQueued } from '../store.js';
+import { status, onStatus, syncNow, ago, jobsNow } from '../sync/auto.js';
 import { ui, onUi, setUi, toggleFilter, clearFilters } from './state.js';
 import { matchesQuery, matchesFilters, sortRecipes, initials, hueFor, formatMinutes, keptRecipes, waitingRecipes } from '../model.js';
 import { EXAMPLES } from '../sample.js';
@@ -20,6 +20,55 @@ function countIn(folderId) {
   let n = 0;
   for (const r of state.recipes.values()) if (!r.review && r.folders.includes(folderId)) n++;
   return n;
+}
+
+/** The + button: type a recipe in, or send pictures of one to be read. */
+function openAdd() {
+  sheet('Add a recipe', (close) => [
+    h('div', { class: 'actions' },
+      h('a', { class: 'action', href: '#/new', onclick: close }, 'Type it in'),
+      h('a', { class: 'action', href: '#/photos', onclick: close }, 'From photos or screenshots')),
+    h('p', { class: 'sheet-text', text: 'For a recipe on a web page, share the page from Safari with Save to Recipes instead.' }),
+  ]);
+}
+
+const minutesSince = (at) => {
+  const time = Date.parse(at);
+  return Number.isFinite(time) ? Math.max(0, Math.floor((Date.now() - time) / 60000)) : 0;
+};
+const pics = (n) => n + (n === 1 ? ' picture' : ' pictures');
+// A job is named by the title typed when it was sent, if there was one, and otherwise by its pictures.
+const named = (job) => (job.title ? '\u201c' + job.title + '\u201d, ' : '') + pics(job.pictures);
+
+/** One lot of pictures on its way to becoming a recipe: waiting to go, being read, or not read. */
+function jobRow(job) {
+  const again = h('button', { class: 'job-btn', type: 'button', onclick: () => { askOfJob(job.id, 'retry'); syncNow(); } }, 'Try again');
+  const discard = h('button', { class: 'job-btn is-danger', type: 'button', onclick: async () => {
+    const yes = await confirmSheet('Discard these pictures?', 'They will be removed from the library without being read.', 'Discard');
+    if (yes) { askOfJob(job.id, 'discard'); syncNow(); }
+  } }, 'Discard');
+
+  if (job.state === 'queued') {
+    return h('div', { class: 'job' },
+      h('p', { class: 'job-title', text: named(job) + ' waiting to be sent' }),
+      h('p', { class: 'job-sub', text: library.config ? 'They go up with the next sync.' : 'Connect a library in Settings and they will be sent.' }),
+      h('div', { class: 'job-buttons' }, h('button', { class: 'job-btn', type: 'button', onclick: () => dropQueued([job.id]) }, 'Cancel')));
+  }
+  if (job.state === 'failed') {
+    return h('div', { class: 'job is-failed' },
+      h('p', { class: 'job-title', text: named(job) + ' could not be read' }),
+      h('p', { class: 'job-sub', text: job.error }),
+      h('div', { class: 'job-buttons' }, again, discard));
+  }
+  const minutes = minutesSince(job.asked || job.at);
+  const slow = minutes >= 10 && !job.pending;
+  const when = minutes < 1 ? 'just now' : minutes + ' min ago';
+  return h('div', { class: 'job' },
+    h('p', { class: 'job-title', text: 'Reading ' + named(job) + '...' }),
+    h('p', { class: 'job-sub', text: job.pending ? 'Another try has been asked for.'
+      : slow ? 'Sent ' + when + ' and still not read. Reading may not be set up in this library: see Settings, Read photos.'
+        : 'Sent ' + when + (job.by ? ' from ' + job.by : '') + '. It usually takes a minute or two.' }),
+    slow ? h('div', { class: 'job-buttons' }, again, discard) : null);
 }
 
 /** Shows the recipes waiting for review. With only one waiting, it opens that one straight away. */
@@ -140,7 +189,7 @@ export function renderHome(root) {
       searchWrap,
       chips,
       rows);
-  root.replaceChildren(scroller, h('a', { class: 'fab', href: '#/new', 'aria-label': 'Add a recipe' }, icon('plus')));
+  root.replaceChildren(scroller, h('button', { class: 'fab', type: 'button', 'aria-label': 'Add a recipe', onclick: openAdd }, icon('plus')));
   pullToSync(scroller, hint);
 
   let shown = '';   // which search and filters the list was last drawn for
@@ -155,6 +204,7 @@ export function renderHome(root) {
     if (search.value !== ui.query) search.value = ui.query;
 
     // Something is waiting: one clear way in. While looking at them: one clear way back.
+    // Under it, any pictures that are still on their way to becoming a recipe.
     review.replaceChildren(...(!toCheck.length ? [] : reviewing
       ? [h('div', { class: 'review-head' },
           h('button', { class: 'back', type: 'button', onclick: () => setUi({ reviewing: false }) }, icon('back'), 'All recipes'),
@@ -162,7 +212,8 @@ export function renderHome(root) {
       : [h('button', { class: 'review-entry', type: 'button', onclick: openReview },
           h('span', { class: 'review-entry-label', text: 'To review' }),
           h('span', { class: 'review-entry-count', text: String(toCheck.length) }),
-          icon('chevron'))]));
+          icon('chevron'))]),
+      ...jobsNow().map(jobRow));
     searchWrap.hidden = reviewing;
     chips.hidden = reviewing;
 
@@ -184,7 +235,7 @@ export function renderHome(root) {
       rows.replaceChildren(h('div', { class: 'empty' },
         h('h2', { text: 'No recipes yet' }),
         h('p', { text: 'Type in one you know by heart, or add three examples to look around.' }),
-        h('a', { class: 'btn btn-main', href: '#/new' }, 'Add a recipe'),
+        h('button', { class: 'btn btn-main', type: 'button', onclick: openAdd }, 'Add a recipe'),
         h('button', { class: 'btn btn-quiet', type: 'button', onclick: addExamples }, 'Add three examples')));
     } else if (!list.length) {
       rows.replaceChildren(h('div', { class: 'empty' },
@@ -205,7 +256,7 @@ export function renderHome(root) {
   subscribe(draw);
   onUi(draw);
   onStatus(drawSync);
-  setInterval(drawSync, 60000);   // keeps "5 min ago" honest
+  setInterval(() => { drawSync(); if (jobsNow().length) draw(); }, 60000);   // keeps "5 min ago" honest
   draw();
   drawSync();
 }

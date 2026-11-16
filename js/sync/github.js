@@ -13,12 +13,14 @@ function toBase64(text) {
   return btoa(binary);
 }
 
-function fromBase64(content) {
+function bytesFromBase64(content) {
   const binary = atob(String(content).replace(/\s/g, ''));
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return bytes;
 }
+
+const fromBase64 = (content) => new TextDecoder().decode(bytesFromBase64(content));
 
 /**
  * `fetch` and `api` can be swapped for tests. `token` is a fine-grained key with Contents read and
@@ -86,6 +88,18 @@ export function createClient({ owner, repo, token, fetch: doFetch, api = 'https:
     async blob(sha) {
       const data = await call('GET', '/git/blobs/' + sha);
       return fromBase64(data.content);
+    },
+
+    /** A file that is not text, such as a picture, as bytes. */
+    async blobBytes(sha) {
+      const data = await call('GET', '/git/blobs/' + sha);
+      return bytesFromBase64(data.content);
+    },
+
+    /** Stores a file that is not text, given as base64, and returns its hash for use in a commit. */
+    async createBlob(base64) {
+      const data = await call('POST', '/git/blobs', { content: base64, encoding: 'base64' });
+      return data.sha;
     },
 
     /** Writes `entries` on top of `tree` as one commit and returns its hash. The branch is not moved yet. */

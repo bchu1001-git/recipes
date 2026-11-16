@@ -184,10 +184,26 @@ test('review: says in plain words what is missing from a recipe that was read fr
   assert.deepEqual(reviewNotes(makeRecipe({ title: 'Lentil soup', ingredients: ['1 cup lentils'] })), ['No steps were found.']);
   const block = makeRecipe({ title: 'Lentil soup', ingredients: ['1 cup lentils'], steps: ['Stir. '.repeat(90)] });
   assert.match(reviewNotes(block)[0], /one block of text/);
+  // A missing title comes first, since it is the one thing Keep will not go without.
   const empty = reviewNotes(makeRecipe({ title: '' }));
   assert.equal(empty.length, 2);
-  assert.match(empty[0], /No recipe was found on the page/);
-  assert.equal(empty[1], 'No title was found.');
+  assert.equal(empty[0], 'No title was found. Type one in below.');
+  assert.match(empty[1], /No recipe was found on the page/);
+});
+
+test('review: a recipe read from pictures says first what there is to know about its title', () => {
+  const read = (fields) => makeRecipe({ source: { kind: 'screenshot' }, ingredients: ['1 cup lentils'], steps: ['Simmer.'], ...fields });
+  // No name in the pictures and none typed: that is the first thing said, in plain words.
+  const untitled = reviewNotes(read({ title: '' }));
+  assert.equal(untitled[0], 'The pictures show no name for this recipe. Type its title in below.');
+  assert.match(untitled[1], /read from the pictures by an AI service/);
+  // A title made from other words in the pictures is pointed out as a suggestion.
+  assert.match(reviewNotes(read({ title: 'Roast Squash with Herb Yoghurt', titleSuggested: true }))[0], /The title is a suggestion/);
+  // A title that was typed, or read as written, needs no remark.
+  assert.deepEqual(reviewNotes(read({ title: 'Lentil soup' })), ['This was read from the pictures by an AI service. Check the amounts and times against the original.']);
+  // No time, no servings, no source: normal for a picture, and nothing is said about them.
+  const plain = read({ title: 'Lentil soup', minutes: null, serves: '', source: { kind: 'photo', name: '' } });
+  assert.equal(reviewNotes(plain).length, 1);
 });
 
 test('headings: a short line that ends with a colon is a heading', () => {

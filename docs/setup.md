@@ -173,7 +173,7 @@ a separate repository in their own account.
    but the app cannot save their changes.
 3. Once they accept, they make their own key with the link in step 4 and connect the app the same way.
 
-## Part 4: saving from Safari, and later steps
+## Part 4: saving from Safari, reading photos, and later steps
 
 **The "Save to Recipes" Shortcut.** Its steps are inside the app, with your library's own address
 filled in: open Recipes, then **Settings**, **Save from Safari**, **Set up or update Save to
@@ -183,8 +183,19 @@ on an iPhone with iOS 27 in November 2026; names can differ a little on other ve
 When the app learns to read more from a page, the script inside the Shortcut has to be replaced. The
 app says so after a sync, and the same screen has the four steps under **Update the script**.
 
+**Reading photos and screenshots.** A library is set up for this once, and every device that uses
+it can then send pictures. The steps are inside the app, with your library's own addresses filled
+in: open Recipes, then **Settings**, **Read photos**. There are three things to do: get a free key
+from Google AI Studio, save it in the library as a secret named `GEMINI_API_KEY`, and add one small
+file to the library that runs the reader when pictures arrive. Nothing is installed anywhere. These
+steps are a first try that still has to be proven against a real library; the screen lists what to
+report.
+
+A second library, such as another household's, repeats those three steps with a key of its own.
+
+To try the reader on a computer first, see "Run the tests" in the README.
+
 These will be written out in full when the parts they belong to are built:
 
-- Add the AI key to the library as a secret.
 - Install the "Recipe Timer" Shortcut.
 - Set up a second, separate library for another household.

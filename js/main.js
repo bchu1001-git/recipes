@@ -1,5 +1,5 @@
 // Starts the app: loads the library saved on this device, draws the list, and shows
-// whatever the address asks for (#/r/<id>, #/new, #/edit/<id>, #/settings, #/save).
+// whatever the address asks for (#/r/<id>, #/new, #/photos, #/edit/<id>, #/settings, #/save, #/read).
 // A recipe that is still waiting for review opens on the review screen instead of its own page.
 
 import { init, state } from './store.js';
@@ -9,6 +9,8 @@ import { renderRecipe } from './ui/recipe.js';
 import { renderEditor } from './ui/editor.js';
 import { renderReview } from './ui/review.js';
 import { renderSaveSetup } from './ui/save.js';
+import { renderPhotos } from './ui/photos.js';
+import { renderReadSetup } from './ui/read.js';
 import { renderSettings, applyAppearance, appearance } from './ui/settings.js';
 import { startAutoSync, status, onStatus } from './sync/auto.js';
 
@@ -29,6 +31,8 @@ function route() {
   else if (name === 'edit' && recipe) leave = renderEditor(detail, id);
   else if (name === 'settings') leave = renderSettings(detail);
   else if (name === 'save') leave = renderSaveSetup(detail);
+  else if (name === 'photos') leave = renderPhotos(detail);
+  else if (name === 'read') leave = renderReadSetup(detail);
   else {
     view = 'list';
     detail.replaceChildren(h('div', { class: 'placeholder' },

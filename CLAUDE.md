@@ -13,6 +13,9 @@ A personal recipe app served from GitHub Pages. Read `README.md` first, then `do
   write a color into a rule.
 - **Data rules live in `js/model.js`** with no DOM or storage in them, and each one has a test in
   `tests/`. Run `node --test tests/*.test.js` after changing them.
+- **The importer (`importer/`) runs in Node inside each library**, with no packages either. It loads
+  `js/model.js`, `js/jobs.js`, `js/import/page.js` and `js/sync/merge.js`, so those four must never
+  use anything only a browser has. The app never loads `importer/`.
 - **The decisions in `docs/decisions.md` are settled.** Build on them. If one has to change, ask the
   owner first and update that file.
 - **Check a change in a browser before calling it done.** `scripts/serve.sh`, then try it at phone
