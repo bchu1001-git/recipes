@@ -9,8 +9,8 @@ How the app is built today, and the plan for the parts that are not built yet. S
 | --- | --- | --- |
 | The app | This public repository, served by GitHub Pages | Built (core screens and To review) |
 | A library | One private repository per library, holding recipes, the pictures they were read from, and folders | Built (recipes, folders, the inbox and originals) |
-| The importer | Code in this repository (`importer/`), run by a GitHub Action inside each library | Built for pictures and run on a computer. Its run inside a library on GitHub is still to be proven. Pasted links are planned |
-| The AI reader | A free tier outside GitHub, called only by the importer, only for pictures | Built: Google's Gemini, tried with a real key on made-up pictures. Still to be tried on the owner's own |
+| The importer | Code in this repository (`importer/`), run by a GitHub Action inside each library | Built for pictures, and proven inside a real library in November 2026. Pasted links are planned |
+| The AI reader | A free tier outside GitHub, called only by the importer, only for pictures | Built: Google's Gemini. Tried with a real key on made-up pictures and on the owner's own screenshots, and run for real from the owner's phone in November 2026 |
 | Shortcuts | "Save to Recipes", "Send to Recipes" and "Recipe Timer", made on each iPhone | Save to Recipes: built, and made and run on an iPhone. Send to Recipes: its steps and the library's side are built; nobody has made the Shortcut yet. Recipe Timer: planned |
 
 Nothing runs on a server owned by this project. A device talks to GitHub Pages for the app's files
@@ -21,15 +21,17 @@ library's workflow, and never by the app.
 ## The app today
 
 - `js/main.js` starts everything and shows a screen for the address: `#/` the list, `#/r/<id>` a
-  recipe, `#/new`, `#/edit/<id>`, `#/settings`, `#/save` (the steps for the Shortcut). A recipe that is
-  still waiting for review opens on the review screen instead of its own page.
+  recipe, `#/cook/<id>` its kitchen view, `#/new`, `#/edit/<id>`, `#/settings`, `#/save` (the steps for
+  the Shortcut), `#/timers` (the steps for the Recipe Timer Shortcut). A recipe that is still waiting
+  for review opens on the review screen instead of its own page.
 - Three panes exist at all times: sidebar, list, detail. A phone shows one at a time, chosen by
   `data-view` on `#app`. A window 900 pixels or wider shows all three. Inside the detail pane, a
   container query lays ingredients and steps side by side once that pane is 46rem wide.
 - `js/store.js` holds the library in memory and saves it to IndexedDB (`recipes` and `meta` stores).
   Screens call `subscribe()` and redraw themselves after any change.
 - `js/ui/state.js` holds what is on screen right now: search text, chosen folders, the open tab,
-  ticked ingredients. None of it is saved.
+  ticked ingredients. None of it is saved, except the ticks, which are kept on the device for half a
+  day (see the kitchen view below).
 - `js/model.js` has every rule that does not need a screen: building a recipe, splitting an ingredient
   line, finding times in a step, search, filtering, sorting.
 
@@ -81,6 +83,60 @@ into the recipe and never synced, it changes no `updated` time, and changing it 
 change to the library, so folding the salsa on one phone hides nothing on another. A fold whose
 heading has been renamed or removed simply stops applying. Deleting a recipe on a device drops its
 record there; a recipe removed by a sync can leave one behind, which does no harm.
+
+### The kitchen view and timers
+
+Code: `js/ui/kitchen.js` (the view), `js/ui/timers.js` (the running timers), `js/ui/clock.js` (the
+steps for the Shortcut), and `js/kitchen.js`, which holds every rule that needs no screen and is what
+`tests/kitchen.test.js` runs.
+
+The view is one layer over the whole app, at `#/cook/<id>`. The recipe's own page is drawn underneath
+and shows faintly through it. It is dark in light and in dark appearance alike: the grey comes from
+the `--k-` tokens at the top of `css/app.css`, and inside the layer the app's usual tokens are pointed
+at them, so the ingredient list drawn for the recipe page (`ingredientList` in `js/ui/recipe.js`)
+looks right there with no rules of its own. While the view is open the strip around the phone's clock
+takes the same grey (`--k-solid`).
+
+- **Steps.** `kitchenRows` turns the steps into rows: a heading, or a step with its number and the
+  minutes of each time it mentions. A section folded on the recipe page is one folded row here, and
+  folding or opening it here changes the same fold. `currentStep` picks the step to light when the
+  rows change, and `stepBeside` is Next and Back. The lit step is scrolled to the middle.
+- **Times.** `findTimers` in `js/model.js` reads the times out of a step's text every time the view is
+  drawn, so the `timers` list stored with a step is not relied on. A range gives both ends ("5 to 7
+  minutes" is 5 and 7). Hours and minutes written together are one time. Fractions, "half an hour"
+  and "a 10-minute rest" are understood. Anything under a minute or over a day is not a timer.
+- **Timers** belong to the device, not to a recipe: `{ id, recipe, step, n, number, minutes, started,
+  mode, rang }`. Time left is always worked out from `started` and the clock (`timeLeft`), never
+  counted down in memory, so a reload changes nothing. Every timer on the device shows in a row at the
+  top of the view whichever recipe and step are open, and each leads to its step. A finished timer is
+  dropped by itself half an hour later.
+- **Two ways to run one**, chosen per device in Settings, Timers (`recipes.timers` in localStorage).
+  *In this app* is the default: at zero `timers.js` shows an alert over whatever part of the app is
+  open and plays a few tones made with the Web Audio API (there is no sound file, and the page's
+  Content Security Policy would not allow one from a `data:` address). It can only do that while the
+  app is open on screen. *In the Clock app*: the button is a real link, `shortcuts://run-shortcut?
+  name=Recipe%20Timer&input=text&text=<minutes>` (`timerLink`), so the tap itself opens the Shortcut
+  that starts a Clock timer; the timer is noted on the device in the same tap, before the phone leaves
+  the app. The app then only keeps count: it cannot see the Clock's timer, raises no alert of its own
+  for it, and lets it be cleared. The link is the plain form on purpose, because asking Shortcuts to
+  come back opens Safari instead of the Home Screen app.
+- **The screen is kept awake** with the Screen Wake Lock API, asked for again each time the app comes
+  back to the front, since the browser lets go of it whenever the app leaves the screen. Where it is
+  missing or refused the view says so in one quiet line.
+
+What the view remembers is kept on the device and never synced, like the folds:
+
+| What | Where | For how long |
+| --- | --- | --- |
+| The step each recipe was left at, and the timers | `meta` store, under `kitchen` (`kitchenStep`, `saveTimers` in `js/store.js`) | Until the recipe is deleted; a finished timer for half an hour |
+| Ticked ingredients | localStorage, `recipes.ticks` (`keepTicks` in `js/ui/state.js`) | Half a day after the last tick |
+| That the view is open | localStorage, `recipes.cooking` | Until the view is left on purpose |
+| Where timers run, and that coming back from Clock has been explained once | localStorage, `recipes.timers` and `recipes.clockTold` | Until changed |
+
+A Home Screen web app that the phone has thrown out of memory starts again at its first address, not
+where it was. So while the view is open it leaves a mark, and when the app starts with no address of
+its own and a mark less than three hours old, it opens straight back into that recipe's kitchen view
+(`resumeCooking`). Leaving the view with Close takes the mark away.
 
 ### Folders
 
@@ -166,7 +222,7 @@ Code: `js/sync/`. `sync.js` and `merge.js` work on plain data, so the tests run 
   runs a short script on the open page, takes the schema.org Recipe data, and writes it into the
   library's `inbox/` as a capture (described below). The app turns that into a recipe itself at its
   next sync, so nothing waits for GitHub and no AI is involved.
-- **Photos and screenshots (built; its run inside a library is still to be proven):** the app puts the
+- **Photos and screenshots (built, and proven inside a real library in November 2026):** the app puts the
   pictures and a small job file into `inbox/`. That push starts the library's workflow, which runs
   the importer from this repository. The importer sends the pictures to the AI reader, gets back a
   recipe, and commits it with `review: true`. See "Reading pictures" below.
@@ -474,6 +530,7 @@ recipient's "Save to Recipes" Shortcut can save it.
 | Can a Shortcut read a recipe page and write into a library? | Proven November 2026 on an iPhone with iOS 27: a page shared from Safari arrived under To review. Format Date could not be set up on that phone, so the file is named with a random number, and Show Result is called Show Content there. The page script was also run in a desktop browser on saved copies of ten live recipe pages, with their styles and without their own scripts: the three that group their ingredients gave the right groups, and the seven that do not gave none |
 | Does the web-page reader cope with real recipe pages? | Tested November 2026 on saved copies of one recipe page from each of 23 sites: 22 gave a full recipe; 1 had only the older in-page markup and gave a title and link |
 | Does the free AI reader cope with the owner's own screenshots? | Tried November 2026 on the owner's own samples, five screenshots of two recipes, on a computer: both came back with every ingredient, step, group and note in place, in two to five seconds, and the same whatever order the pictures were given in. One recipe's name was not in its pictures, and its title was suggested from the names of its two groups. Still to be tried from the owner's phone. The larger Gemini models took minutes on the same pictures, or timed out, so the small one is used. Also tried with a real key on six made-up pictures, sent through the app and the importer on a computer: a recipe-site screenshot, a social media caption, a photographed cookbook page with two groups of ingredients, a recipe over two overlapping screenshots, and a page with no recipe. Each recipe came back complete in two to three seconds, with nothing added, the groups as headings, and the overlap read once; the page with no recipe became a failed job. A half written as one character sometimes came back as 1/2. A seventh picture, a recipe card with a stain over one amount, two steps running off its edge and one blurred step, came back with the cut-off words left cut off and those four lines named as unsure |
-| Can a Shortcut send a note's pictures to a library in one go? | Half proven. November 2026, on an iPhone with iOS 27: a share-sheet Shortcut given a note (Share, Send Copy) receives its pictures, and one more, Notes' own PDF copy of the note as a picture. The file such a Shortcut would send (one picture's base64 to a line, no JSON) was built on a computer from four of the owner's screenshots and a made-up note page, and went through the real importer and reader: the title came from the note page, with every ingredient, step and group and the typed line. The JSON form, with line breaks left in the base64 and the pictures as PNG, gave the same. Still to test: the "Send to Recipes" Shortcut itself, with the steps in Settings, Send from other apps, and whether GitHub takes an upload of a few megabytes from it |
-| Does the importer run inside a library on GitHub? | To test, with the steps in Settings, Read photos. The workflow file has been checked as text only: nobody has run it |
+| Can a Shortcut send a note's pictures to a library in one go? | Proven November 2026, on an iPhone with iOS 27: a share-sheet Shortcut given a note (Share, Send Copy) receives its pictures, and one more, Notes' own PDF copy of the note as a picture. The file such a Shortcut would send (one picture's base64 to a line, no JSON) was built on a computer from four of the owner's screenshots and a made-up note page, and went through the real importer and reader: the title came from the note page, with every ingredient, step and group and the typed line. The JSON form, with line breaks left in the base64 and the pictures as PNG, gave the same. Then the "Send to Recipes" Shortcut itself, made from the steps in Settings, Send from other apps, sent a note holding four screenshots: all five pictures arrived in one upload of a few megabytes, the recipe came back under To review with its groups and sections, and its title was read from the note page |
+| Does the importer run inside a library on GitHub? | Proven November 2026: with the secret and the workflow file in place, a push of pictures started the run in a private library, and the recipe and its pictures were committed back. That first run came from a shared note; sending from the + button has not been tried on a phone |
+| Does the kitchen view work on an iPhone? | To test. In a desktop browser everything was run: steps, folds, ticks, both kinds of timer, a reload in the middle of a countdown, the alert at zero, and the Clock link read but not followed. Not yet known on a phone: whether the screen stays awake, whether the in-app timer's sound is heard and whether it follows the silent switch, and the app opening back into the view after the phone reloads it |
 | Does syncing work against real GitHub? | Proven November 2026: an iPhone connected to an empty private library and synced |

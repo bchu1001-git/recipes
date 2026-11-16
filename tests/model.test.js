@@ -66,8 +66,59 @@ test('ingredient: labels for the two columns', () => {
 test('timers: minutes and hours found in a step', () => {
   assert.deepEqual(findTimers('Bring to a boil, then simmer for 20 minutes.'), [20]);
   assert.deepEqual(findTimers('Bake 1 hour, rest 10 min, then chill 1.5 hours'), [60, 10, 90]);
-  assert.deepEqual(findTimers('Cook 5 to 7 minutes until soft'), [5]);
   assert.deepEqual(findTimers('Heat the oven to 350 degrees.'), []);
+  assert.deepEqual(findTimers('Bake at 350 degrees for 45 minutes.'), [45]);
+  assert.deepEqual(findTimers(''), []);
+  assert.deepEqual(findTimers(null), []);
+});
+
+test('timers: a range gives both ends, the short one first', () => {
+  assert.deepEqual(findTimers('Cook 5 to 7 minutes until soft'), [5, 7]);
+  assert.deepEqual(findTimers('Let sit for 10-20 minutes to soak.'), [10, 20]);
+  assert.deepEqual(findTimers('Stir fry for 2–3 minutes.'), [2, 3]);
+  assert.deepEqual(findTimers('Simmer 1 to 1 1/2 hours.'), [60, 90]);
+  assert.deepEqual(findTimers('Rest 3 or 4 minutes.'), [3, 4]);
+  assert.deepEqual(findTimers('Bake 45 minutes to 1 hour.'), [45, 60]);
+  assert.deepEqual(findTimers('Cook 5 minutes, flip, cook 5 minutes.'), [5, 5]);
+});
+
+test('timers: hours and minutes written together are one time', () => {
+  assert.deepEqual(findTimers('Roast for 1 hour 30 minutes.'), [90]);
+  assert.deepEqual(findTimers('Braise 2 hrs 15 mins, covered.'), [135]);
+  assert.deepEqual(findTimers('Bake 1 hour and 10 minutes.'), [70]);
+  assert.deepEqual(findTimers('Chill for 1 hour and a half.'), [90]);
+  assert.deepEqual(findTimers('Bake 1 hour, rest 10 minutes.'), [60, 10]);
+  assert.deepEqual(findTimers('Cook 10 minutes and 5 minutes more.'), [10, 5]);
+});
+
+test('timers: fractions, words and the hyphenated way of writing a time', () => {
+  assert.deepEqual(findTimers('Simmer 1 1/2 hours.'), [90]);
+  assert.deepEqual(findTimers('Simmer 1½ hours.'), [90]);
+  assert.deepEqual(findTimers('Rest ½ hour.'), [30]);
+  assert.deepEqual(findTimers('Rest 1/2 hour.'), [30]);
+  assert.deepEqual(findTimers('Chill 2.5 hours.'), [150]);
+  assert.deepEqual(findTimers('Leave for half an hour.'), [30]);
+  assert.deepEqual(findTimers('Leave for about an hour.'), [60]);
+  assert.deepEqual(findTimers('Leave for an hour and a half.'), [90]);
+  assert.deepEqual(findTimers('Give it a 10-minute rest.'), [10]);
+  assert.deepEqual(findTimers('Cook 10 more minutes.'), [10]);
+});
+
+test('timers: seconds only count from a minute up, and nothing is longer than a day', () => {
+  assert.deepEqual(findTimers('Stir fry for 15 seconds.'), []);
+  assert.deepEqual(findTimers('Blend for 30 seconds, then rest 5 minutes.'), [5]);
+  assert.deepEqual(findTimers('Microwave 90 seconds.'), [2]);
+  assert.deepEqual(findTimers('Whisk 45 to 60 seconds.'), [1]);
+  assert.deepEqual(findTimers('Boil 2 minutes 30 seconds.'), [3]);
+  assert.deepEqual(findTimers('Cure for 48 hours.'), []);
+  assert.deepEqual(findTimers('Marinate 8 hours or overnight.'), [480]);
+});
+
+test('timers: amounts that are not times are left alone', () => {
+  assert.deepEqual(findTimers('Add 2 tomatoes and 1 orange.'), []);
+  assert.deepEqual(findTimers('Roll into 1-1¼" balls.'), []);
+  assert.deepEqual(findTimers('Add 2 minced garlic cloves and a second onion.'), []);
+  assert.deepEqual(findTimers('Use a 9x13 inch pan.'), []);
 });
 
 test('duration: the forms someone might type', () => {

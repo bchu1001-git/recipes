@@ -173,7 +173,7 @@ a separate repository in their own account.
    but the app cannot save their changes.
 3. Once they accept, they make their own key with the link in step 4 and connect the app the same way.
 
-## Part 4: saving from Safari, reading photos, and later steps
+## Part 4: saving from Safari, reading photos, timers, and later steps
 
 **The "Save to Recipes" Shortcut.** Its steps are inside the app, with your library's own address
 filled in: open Recipes, then **Settings**, **Save from Safari**, **Set up or update Save to
@@ -188,8 +188,7 @@ it can then send pictures. The steps are inside the app, with your library's own
 in: open Recipes, then **Settings**, **Read photos**. There are three things to do: get a free key
 from Google AI Studio, save it in the library as a secret named `GEMINI_API_KEY`, and add one small
 file to the library that runs the reader when pictures arrive. Nothing is installed anywhere. These
-steps are a first try that still has to be proven against a real library; the screen lists what to
-report.
+steps were run against a real library in November 2026.
 
 A second library, such as another household's, repeats those three steps with a key of its own.
 
@@ -198,12 +197,18 @@ in a note: this Shortcut sits in the share sheet and sends a note's pictures str
 to be read, with no trip through the photo library. It relies on reading photos being set up first.
 Its steps are inside the app, with your library's own address filled in: open Recipes, then
 **Settings**, **Send from other apps**, **Set up Send to Recipes**. It is made by hand on each iPhone
-and can share the key of the Save to Recipes Shortcut. The steps are a first try that still has to
-be proven on a phone; the screen lists what to report.
+and can share the key of the Save to Recipes Shortcut. The steps were run on an iPhone with iOS 27 in
+November 2026.
 
 To try the reader on a computer first, see "Run the tests" in the README.
 
-These will be written out in full when the parts they belong to are built:
+**The "Recipe Timer" Shortcut.** Only needed if timers in the kitchen view should run in the
+iPhone's Clock app, where they ring even with the phone locked. Without it, timers run inside Recipes
+and ring only while the app is open on screen. Open Recipes, then **Settings**, **Timers**, and choose
+**In the Clock app**: the screen that opens has the three steps for making the Shortcut and a button
+to try it. Each iPhone makes its own and chooses for itself. The steps were run on an iPhone with
+iOS 27 in November 2026.
 
-- Install the "Recipe Timer" Shortcut.
+This will be written out in full when the part it belongs to is built:
+
 - Set up a second, separate library for another household.

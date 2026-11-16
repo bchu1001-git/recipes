@@ -1,5 +1,6 @@
 // Starts the app: loads the library saved on this device, draws the list, and shows
-// whatever the address asks for (#/r/<id>, #/new, #/photos, #/edit/<id>, #/settings, #/save, #/read, #/send).
+// whatever the address asks for (#/r/<id>, #/cook/<id>, #/new, #/photos, #/edit/<id>, #/settings, #/save,
+// #/read, #/send, #/timers).
 // A recipe that is still waiting for review opens on the review screen instead of its own page.
 
 import { init, state } from './store.js';
@@ -12,6 +13,9 @@ import { renderSaveSetup } from './ui/save.js';
 import { renderPhotos } from './ui/photos.js';
 import { renderReadSetup } from './ui/read.js';
 import { renderSendSetup } from './ui/send.js';
+import { renderKitchen, cookingToResume } from './ui/kitchen.js';
+import { renderClockSetup } from './ui/clock.js';
+import { startTimers } from './ui/timers.js';
 import { renderSettings, applyAppearance, appearance } from './ui/settings.js';
 import { startAutoSync, status, onStatus } from './sync/auto.js';
 
@@ -22,12 +26,18 @@ const detail = document.getElementById('detail');
 let leave = null;
 
 function route() {
-  const [name, id] = location.hash.replace(/^#\/?/, '').split('/');
+  const [name, id, more] = location.hash.replace(/^#\/?/, '').split('/');
   if (leave) { leave(); leave = null; }
   let view = 'detail';
   const recipe = state.recipes.get(id);
-  if ((name === 'r' || name === 'edit') && recipe && recipe.review) leave = renderReview(detail, id);
+  if ((name === 'r' || name === 'edit' || name === 'cook') && recipe && recipe.review) leave = renderReview(detail, id);
   else if (name === 'r' && recipe) leave = renderRecipe(detail, id);
+  else if (name === 'cook' && recipe) {
+    // The kitchen view lies over the recipe's own page, which shows faintly through it.
+    const closePage = renderRecipe(detail, id);
+    const closeKitchen = renderKitchen(id, /^\d+$/.test(more || '') ? Number(more) : undefined);
+    leave = () => { closeKitchen(); closePage(); };
+  }
   else if (name === 'new') leave = renderEditor(detail, null);
   else if (name === 'edit' && recipe) leave = renderEditor(detail, id);
   else if (name === 'settings') leave = renderSettings(detail);
@@ -35,6 +45,7 @@ function route() {
   else if (name === 'photos') leave = renderPhotos(detail);
   else if (name === 'read') leave = renderReadSetup(detail);
   else if (name === 'send') leave = renderSendSetup(detail);
+  else if (name === 'timers') leave = renderClockSetup(detail);
   else {
     view = 'list';
     detail.replaceChildren(h('div', { class: 'placeholder' },
@@ -76,8 +87,12 @@ async function start() {
   applyAppearance(appearance());
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyAppearance(appearance()));
   await init();
+  startTimers();
   renderSide(side);
   renderHome(list);
+  // Closed or reloaded by the phone in the middle of cooking: open straight back into the kitchen view.
+  const cooking = cookingToResume();
+  if (cooking && state.recipes.has(cooking) && /^#?\/?$/.test(location.hash)) history.replaceState(null, '', '#/cook/' + cooking);
   route();
   addEventListener('hashchange', route);
   if (!state.saved) toast('This browser is not saving data. Recipes will be gone when the tab closes.');

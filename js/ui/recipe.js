@@ -3,8 +3,8 @@
 
 import { h, icon, sheet, confirmSheet, go, toast, paintChip } from './dom.js';
 import { state, subscribe, saveRecipe, deleteRecipe, foldsFor, setFold } from '../store.js';
-import { ui, setUi, ticksFor } from './state.js';
-import { amountLabel, itemLabel, formatMinutes, folderIndex, webLink, partsOf } from '../model.js';
+import { ui, setUi, ticksFor, keepTicks } from './state.js';
+import { amountLabel, itemLabel, formatMinutes, folderIndex, webLink, partsOf, isHeading } from '../model.js';
 import { openPictures } from './pictures.js';
 
 const TABS = [['ing', 'Ingredients'], ['steps', 'Steps'], ['notes', 'Notes']];
@@ -97,13 +97,15 @@ function foldingItems(recipe, list, where, line) {
   return items;
 }
 
-function ingredients(recipe) {
+/** The ingredients with their groups, folds and ticks. The kitchen view shows this same list. */
+export function ingredientList(recipe) {
   if (!recipe.ingredients.length) return h('p', { class: 'quiet', text: 'No ingredients yet.' });
   const ticks = ticksFor(recipe.id);
   return h('ul', { class: 'ing' }, foldingItems(recipe, recipe.ingredients, 'ing', (ing, i) => {
     const li = h('li', { class: ticks.has(i) ? 'is-done' : '' },
       h('button', { class: 'ing-row', type: 'button', 'aria-pressed': String(ticks.has(i)), onclick: () => {
         if (ticks.has(i)) ticks.delete(i); else ticks.add(i);
+        keepTicks(recipe.id);
         li.classList.toggle('is-done', ticks.has(i));
         li.firstChild.setAttribute('aria-pressed', String(ticks.has(i)));
       } },
@@ -139,7 +141,7 @@ export function renderRecipe(root, id) {
     const meta = [formatMinutes(recipe.minutes), recipe.serves ? 'Serves ' + recipe.serves : ''].filter(Boolean);
 
     const panes = {
-      ing: h('section', { class: 'part part-ing' + (ui.tab === 'ing' ? '' : ' is-off') }, h('h2', { class: 'label part-label', text: 'Ingredients' }), ingredients(recipe)),
+      ing: h('section', { class: 'part part-ing' + (ui.tab === 'ing' ? '' : ' is-off') }, h('h2', { class: 'label part-label', text: 'Ingredients' }), ingredientList(recipe)),
       steps: h('section', { class: 'part part-steps' + (ui.tab === 'steps' ? '' : ' is-off') }, h('h2', { class: 'label part-label', text: 'Steps' }), steps(recipe)),
       notes: h('section', { class: 'part part-notes' + (ui.tab === 'notes' ? '' : ' is-off') }, h('h2', { class: 'label part-label', text: 'Notes' }), notes(recipe)),
     };
@@ -167,6 +169,10 @@ export function renderRecipe(root, id) {
               ? h('a', { href: webLink(recipe.source.url), target: '_blank', rel: 'noopener noreferrer', text: recipe.source.name || 'Source' })
               : recipe.source.name),
           rating(recipe),
+          // The way into the kitchen view: every step in large type, the screen kept awake, and timers.
+          recipe.steps.some((s) => !isHeading(s.text))
+            ? h('a', { class: 'btn btn-main cook-btn', href: '#/cook/' + recipe.id }, icon('timer'), 'Kitchen view')
+            : null,
           tabs,
           h('div', { class: 'parts' }, panes.ing, panes.steps, panes.notes))));
     root.querySelector('.pane-scroll').scrollTop = keep;

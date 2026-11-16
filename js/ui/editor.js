@@ -34,9 +34,11 @@ export function recipeFields(existing) {
 
   const nodes = [
     field('Title', title), problem,
+    // No example text inside these two boxes: "45 min" and "4" in an empty box were taken for values
+    // that would be saved. The examples sit underneath, where a hint cannot be mistaken for an answer.
     h('div', { class: 'field-pair' },
-      field('Time', input('time', existing ? formatMinutes(existing.minutes) : '', { placeholder: '45 min', inputmode: 'text' })),
-      field('Serves', input('serves', existing && existing.serves, { placeholder: '4' }))),
+      field('Time', input('time', existing ? formatMinutes(existing.minutes) : '', { inputmode: 'text' }), 'Such as 45 min. Leave empty if unknown.'),
+      field('Serves', input('serves', existing && existing.serves), 'Such as 4. Leave empty if unknown.')),
     field('Ingredients', area('ingredients', existing ? linesOf(existing.ingredients) : '', 8),
       'One per line, written the way you would say it: 2 carrots, sliced. A line that ends with a colon becomes a heading: For the salsa:'),
     field('Steps', area('steps', existing ? linesOf(existing.steps) : '', 8),

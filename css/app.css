@@ -5,6 +5,9 @@
   --bg: #ffffff; --bg2: #f3f5f4; --ink: #17201b; --ink2: #56615b; --ink3: #8a948e; --line: #e3e8e5; --segon: #ffffff;
   --acc: #1f8f4e; --soft: #e7f4ea; --onsoft: #136337; --onacc: #ffffff; --danger: #c0392b; --shadow: rgba(0, 0, 0, .16);
   --tile-bg: 90%; --tile-fg: 28%; --star-off: #d5dcd8;
+  /* The kitchen view is a dark see-through grey in light and in dark alike. --k-solid is the same grey with nothing showing through. */
+  --k-bg: rgba(34, 40, 37, .9); --k-solid: #383e3b; --k-panel: #2d3430; --k-raise: rgba(255, 255, 255, .1); --k-line: rgba(255, 255, 255, .16); --k-veil: rgba(0, 0, 0, .45);
+  --k-ink: #f4f7f5; --k-ink2: #cfd7d2; --k-dim: #a2ada7; --k-acc: #6fd79b; --k-onacc: #0b1a11; --k-soft: rgba(111, 215, 155, .2);
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -16,6 +19,7 @@
     --bg: #121614; --bg2: #1c2220; --ink: #edf1ee; --ink2: #a9b3ad; --ink3: #77827c; --line: #2b3430; --segon: #313a36;
     --acc: #4fbf7f; --soft: #143122; --onsoft: #8fdcb0; --onacc: #08130c; --danger: #ff7b6e; --shadow: rgba(0, 0, 0, .55);
     --tile-bg: 26%; --tile-fg: 82%; --star-off: #3a443f;
+    --k-bg: rgba(60, 67, 63, .88); --k-solid: #373e3a; --k-panel: #2f3632;
     color-scheme: dark;
   }
 }
@@ -23,6 +27,7 @@
   --bg: #121614; --bg2: #1c2220; --ink: #edf1ee; --ink2: #a9b3ad; --ink3: #77827c; --line: #2b3430; --segon: #313a36;
   --acc: #4fbf7f; --soft: #143122; --onsoft: #8fdcb0; --onacc: #08130c; --danger: #ff7b6e; --shadow: rgba(0, 0, 0, .55);
   --tile-bg: 26%; --tile-fg: 82%; --star-off: #3a443f;
+  --k-bg: rgba(60, 67, 63, .88); --k-solid: #373e3a; --k-panel: #2f3632;
   color-scheme: dark;
 }
 
@@ -219,6 +224,8 @@ input, textarea { font: inherit; color: inherit; }
 .input { width: 100%; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); padding: 11px 12px; font-size: 16px; -webkit-appearance: none; appearance: none; }
 textarea.input { resize: vertical; line-height: 1.4; min-height: 5rem; }
 .input:focus { outline: 2px solid var(--acc); outline-offset: 0; border-color: transparent; }
+/* Example text in an empty box is kept faint, so it is not taken for something already filled in. */
+.input::placeholder { color: var(--ink3); opacity: .75; }
 .editor-heading { font-size: 17px; font-weight: 700; margin-top: 6px; }
 .editor-save { margin-top: 6px; }
 .settings { padding: 4px var(--gutter) 0; display: flex; flex-direction: column; gap: 28px; max-width: 44rem; }
@@ -307,3 +314,89 @@ textarea.input { resize: vertical; line-height: 1.4; min-height: 5rem; }
 .pictures-full { display: flex; flex-direction: column; gap: 12px; }
 .pictures-full .picture { border-radius: 10px; overflow: hidden; background: var(--bg2); border: 1px solid var(--line); }
 
+/* ---------- the kitchen view: every step large, the current one lit, on a dark see-through grey ---------- */
+.cook-btn { align-self: flex-start; margin-top: 2px; }
+.cook-btn .icon { width: 20px; height: 20px; }
+/* Inside the view the app's usual tokens stand for the kitchen's own, so the ingredient list drawn
+   for the recipe page looks right here without a second set of rules. */
+.kitchen {
+  --bg: var(--k-panel); --bg2: var(--k-raise); --ink: var(--k-ink); --ink2: var(--k-ink2); --ink3: var(--k-dim); --line: var(--k-line);
+  --acc: var(--k-acc); --onacc: var(--k-onacc); --soft: var(--k-soft); --onsoft: var(--k-acc);
+  position: fixed; inset: 0; z-index: 15; display: flex; flex-direction: column; padding-top: var(--safe-top);
+  background: var(--k-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: var(--ink); color-scheme: dark;
+}
+.k-bar { display: flex; align-items: center; gap: 8px; padding: 8px var(--gutter) 6px; min-height: 60px; }
+.k-title { flex: 1; min-width: 0; font-size: 17px; font-weight: 600; text-align: center; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k-bar-btn { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 48px; padding: 0 14px; border-radius: 12px; background: var(--k-raise); color: var(--ink); font-weight: 600; font-size: 16px; }
+.k-bar-btn .icon { width: 20px; height: 20px; }
+.k-timers { display: none; gap: 8px; overflow-x: auto; padding: 4px var(--gutter) 8px; scrollbar-width: none; }
+.k-timers::-webkit-scrollbar { display: none; }
+.has-timers .k-timers { display: flex; }
+.k-chip { display: inline-flex; align-items: stretch; flex: none; border-radius: 12px; background: var(--k-raise); overflow: hidden; }
+.k-chip-main { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 4px 0 14px; font-size: 16px; }
+.k-chip-where { color: var(--ink2); max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.k-chip-left { font-weight: 700; font-variant-numeric: tabular-nums; }
+.k-chip-clear { display: grid; place-items: center; width: 44px; color: var(--ink3); }
+.k-chip-clear .icon { width: 18px; height: 18px; }
+.k-chip.is-done { background: var(--acc); color: var(--onacc); }
+.k-chip.is-done .k-chip-where, .k-chip.is-done .k-chip-clear { color: var(--onacc); }
+.k-notes { padding: 0 var(--gutter); }
+.k-note { color: var(--ink3); font-size: 14px; padding-bottom: 6px; }
+.k-main { position: relative; flex: 1; min-height: 0; display: flex; }
+.k-scroll { flex: 1; min-width: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 8px var(--gutter) 40vh; }
+.k-steps { display: flex; flex-direction: column; gap: 6px; max-width: 46rem; margin: 0 auto; }
+.k-step { border-radius: 16px; border-left: 4px solid transparent; }
+.k-step-main { display: grid; grid-template-columns: 2.2rem minmax(0, 1fr); gap: 8px; width: 100%; padding: 14px 14px 14px 10px; font-size: 22px; line-height: 1.4; color: var(--ink3); text-align: left; }
+.k-step-n { font-weight: 700; font-variant-numeric: tabular-nums; }
+.k-step.is-lit { background: var(--k-raise); border-left-color: var(--acc); }
+.k-step.is-lit .k-step-main { color: var(--ink); }
+.k-step.is-lit .k-step-n { color: var(--acc); }
+.k-times { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 14px 14px 10px; }
+.k-time-slot { display: inline-flex; align-items: stretch; gap: 6px; }
+.k-time { display: inline-flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 18px; border-radius: 26px; border: 2px solid var(--acc); color: var(--acc); font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.k-time .timer-icon { width: 22px; height: 22px; }
+.k-time.is-running { background: var(--soft); color: var(--ink); }
+.k-time.is-done { background: var(--acc); color: var(--onacc); }
+.k-time-clear { display: grid; place-items: center; width: 52px; min-height: 52px; border-radius: 50%; background: var(--k-raise); color: var(--ink2); }
+.k-time-clear .icon { width: 20px; height: 20px; }
+.k-head { padding: 14px 14px 0; }
+.k-head h3, .k-fold { font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+.k-fold { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; text-align: left; }
+.k-fold-count { color: var(--ink3); font-weight: 600; letter-spacing: 0; text-transform: none; }
+.k-fold-arrow { flex: none; width: 20px; height: 20px; color: var(--ink3); }
+.is-folded .k-fold-arrow { transform: rotate(-90deg); }
+.k-empty { color: var(--ink3); padding: 24px 14px; font-size: 18px; }
+.k-nav { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 10px var(--gutter) calc(12px + var(--safe-bottom)); border-top: 1px solid var(--line); }
+.k-nav-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 64px; border-radius: 16px; background: var(--k-raise); color: var(--ink); font-size: 20px; font-weight: 700; }
+.k-nav-btn.is-next { background: var(--acc); color: var(--onacc); }
+.k-nav-btn:disabled { opacity: .35; cursor: default; }
+.k-count { color: var(--ink2); font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The ingredients: a panel over the view on a phone, a column beside the steps on a wide window. */
+.k-ing { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; max-height: 82%; display: none; flex-direction: column; background: var(--k-panel); border-radius: 18px 18px 0 0; box-shadow: 0 -8px 30px var(--shadow); }
+.k-panel-back { position: absolute; inset: 0; z-index: 1; display: none; background: var(--k-veil); }
+.has-panel .k-ing { display: flex; }
+.has-panel .k-panel-back { display: block; }
+.k-ing-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px var(--gutter) 6px; }
+.k-ing-title { font-size: 18px; font-weight: 700; }
+.k-ing-body { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 var(--gutter) calc(18px + var(--safe-bottom)); }
+.k-ing .ing-row { font-size: 19px; padding: 13px 0; }
+@media (min-width: 900px) {
+  .k-ing { position: static; display: flex; flex: none; width: 24rem; max-height: none; border-radius: 0; box-shadow: none; background: none; border-right: 1px solid var(--line); }
+  .k-ing-btn, .k-ing-done, .has-panel .k-panel-back { display: none; }
+  .k-ing-body { padding: 0 24px 24px; }
+  .k-ing-head { padding: 12px 24px 6px; }
+  .k-scroll { padding-inline: 40px; }
+  .k-step-main { font-size: 26px; }
+  .k-times { padding-left: calc(18px + 2.2rem); }
+}
+
+/* A timer that has run out, shown over whatever part of the app is open. */
+.timer-alert { position: fixed; left: 50%; top: calc(10px + var(--safe-top)); z-index: 40; transform: translateX(-50%); width: min(34rem, calc(100% - 24px)); display: flex; flex-direction: column; gap: 8px; }
+.timer-alert-row { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 16px; background: var(--acc); color: var(--onacc); box-shadow: 0 8px 28px var(--shadow); animation: timer-pulse 1.1s ease-in-out infinite; }
+.timer-alert-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 15px; }
+.timer-alert-text strong { font-size: 19px; }
+.timer-alert-buttons { display: flex; gap: 8px; flex: none; }
+.timer-alert-btn { min-height: 48px; padding: 0 16px; border-radius: 12px; border: 2px solid currentColor; font-weight: 700; font-size: 16px; }
+.timer-alert-btn.is-main { background: var(--onacc); color: var(--acc); border-color: transparent; }
+@keyframes timer-pulse { 50% { transform: scale(1.025); } }
+@media (prefers-reduced-motion: reduce) { .timer-alert-row { animation: none; } }

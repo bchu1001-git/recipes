@@ -1,4 +1,4 @@
-// Settings: appearance, folders, the library, saving from Safari, backup, and the example recipes.
+// Settings: appearance, folders, the library, getting recipes in, timers, backup, and the example recipes.
 
 import { h, icon, sheet, confirmSheet, toast } from './dom.js';
 import { state, library, subscribe, saveFolders, removeFolder, saveRecipe, deleteRecipe, exportAll, importAll } from '../store.js';
@@ -6,9 +6,11 @@ import { status, onStatus, syncNow, connect, disconnect, explain, ago, scriptIsO
 import { newFolderId } from '../model.js';
 import { EXAMPLES } from '../sample.js';
 import { BUILD } from '../version.js';
+import { timerMode, setTimerMode } from './timers.js';
 
 const APPEARANCE_KEY = 'recipes.appearance';
 const MODES = [['system', 'Match the phone'], ['light', 'Light'], ['dark', 'Dark']];
+const TIMER_MODES = [['here', 'In this app'], ['clock', 'In the Clock app']];
 
 export function appearance() {
   try { return localStorage.getItem(APPEARANCE_KEY) || 'system'; } catch (e) { return 'system'; }
@@ -240,9 +242,19 @@ export function renderSettings(root) {
             } }, 'Add three example recipes')),
 
         h('section', { class: 'set' },
-          h('h2', { class: 'label', text: 'Tests' }),
-          h('p', { class: 'set-note', text: 'A one-off check that this phone can hand a timer to the Clock app.' }),
-          h('a', { class: 'btn btn-quiet', href: 'proofs/timer.html' }, 'Try the Clock timer')),
+          h('h2', { class: 'label', text: 'Timers' }),
+          h('p', { class: 'set-note', text: 'In the kitchen view, each time a step mentions is a timer you can start. Choose where timers run on this device.' }),
+          h('div', { class: 'seg', role: 'group', 'aria-label': 'Where timers run' }, TIMER_MODES.map(([key, label]) =>
+            h('button', { class: 'seg-btn' + (timerMode() === key ? ' is-on' : ''), type: 'button', 'aria-pressed': String(timerMode() === key),
+              onclick: () => {
+                setTimerMode(key);
+                // The Clock app needs a small Shortcut, so choosing it leads to the screen that says how.
+                if (key === 'clock') location.hash = '#/timers'; else draw();
+              } }, label))),
+          h('p', { class: 'set-note', text: timerMode() === 'clock'
+            ? 'A timer starts in the iPhone’s Clock app and rings even when the phone is locked. It needs the Recipe Timer Shortcut.'
+            : 'A countdown shows in the kitchen view. It rings only while Recipes is open on screen.' }),
+          timerMode() === 'clock' ? h('a', { class: 'btn btn-quiet', href: '#/timers' }, 'Set up or try the Recipe Timer Shortcut') : null),
 
         h('p', { class: 'set-version', text: 'Recipes · version ' + BUILD + (state.saved ? '' : ' · this browser is not saving data') }))));
     root.querySelector('.pane-scroll').scrollTop = keep;

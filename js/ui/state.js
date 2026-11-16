@@ -1,5 +1,9 @@
 // What the person is looking at right now: the search, the chosen folders, the open tab.
-// None of this is saved; it resets when the app is reopened.
+// None of this is saved; it resets when the app is reopened. The one exception is the ticked
+// ingredients, which are kept on the device for half a day, so that the phone reloading the app in
+// the middle of cooking does not untick them.
+
+import { freshTicks } from '../kitchen.js';
 
 export const ui = {
   query: '',
@@ -34,7 +38,34 @@ export function clearFilters() {
   setUi({ filters: new Set(), gotoOnly: false, query: '', reviewing: false });
 }
 
+const TICKS_KEY = 'recipes.ticks';
+const tickedAt = new Map();   // recipe id -> when one of its ingredients was last ticked or unticked
+let ticksRead = false;
+
+function readTicks() {
+  if (ticksRead) return;
+  ticksRead = true;
+  try {
+    const saved = freshTicks(JSON.parse(localStorage.getItem(TICKS_KEY) || 'null'), Date.now());
+    for (const [id, ticks] of Object.entries(saved)) {
+      ui.ticks.set(id, new Set(ticks.on));
+      tickedAt.set(id, ticks.at);
+    }
+  } catch (err) { /* nothing was kept, or it cannot be read: start clean */ }
+}
+
+/** The ticked ingredients of a recipe, as a set of places in its ingredient list. The recipe page and the kitchen view share it. */
 export function ticksFor(id) {
+  readTicks();
   if (!ui.ticks.has(id)) ui.ticks.set(id, new Set());
   return ui.ticks.get(id);
+}
+
+/** Keeps a recipe's ticks on the device after one of them changed. They are dropped half a day after the last change. */
+export function keepTicks(id) {
+  readTicks();
+  tickedAt.set(id, Date.now());
+  const all = {};
+  for (const [recipe, at] of tickedAt) all[recipe] = { at, on: [...(ui.ticks.get(recipe) || [])] };
+  try { localStorage.setItem(TICKS_KEY, JSON.stringify(freshTicks(all, Date.now()))); } catch (err) { /* they last until the app is closed */ }
 }

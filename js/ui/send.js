@@ -47,7 +47,7 @@ export function renderSendSetup(root) {
           ? 'As of the last sync, this library is set up to read pictures, which this Shortcut relies on.'
           : 'This library is not set up to read pictures yet, and this Shortcut relies on that. Do Settings, Read photos first.' }),
         library.base.reader === true ? null : h('a', { class: 'btn btn-quiet', href: '#/read' }, 'Set up Read photos'),
-        h('p', { class: 'howto-note', text: 'This is a first try. It has not been run on a phone yet, and Shortcuts names things a little differently from one iOS version to the next. Where a step does not match what you see, note what you see instead.' }),
+        h('p', { class: 'howto-note', text: 'These steps were run on an iPhone with iOS 27 in November 2026. Shortcuts names things a little differently from one iOS version to the next, so where a step does not match what you see, look for the closest one.' }),
 
         h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Putting a variable in a field' }),

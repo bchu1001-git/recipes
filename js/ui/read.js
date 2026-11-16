@@ -47,7 +47,7 @@ export function renderReadSetup(root) {
         h('p', { class: 'howto-note', text: library.base.reader === true
           ? 'As of the last sync, this library has the file that does the reading (step 3). If pictures still come back unread, check the key in step 2.'
           : 'As of the last sync, this library does not have the file that does the reading yet.' }),
-        h('p', { class: 'howto-note', text: 'This is a first try. These steps have not been run against a real library yet, and GitHub and Google rename their buttons now and then. Where a step does not match what you see, note what you see instead.' }),
+        h('p', { class: 'howto-note', text: 'These steps were run against a real library in November 2026. GitHub and Google rename their buttons now and then, so where a step does not match what you see, look for the closest one.' }),
 
         h('ol', { class: 'howto' },
           step('Get a key from Google',

@@ -27,6 +27,10 @@ export const library = {
 // time, and changing it does not count as a change to the library, so nobody listening is told.
 let folds = {};
 
+// What the kitchen view remembers on this device: the step each recipe was left at, and the timers
+// that are running. Like the folds, none of it is part of a recipe and none of it is ever synced.
+let kitchen = { steps: {}, timers: [] };
+
 let db = null;
 const listeners = new Set();
 
@@ -83,6 +87,13 @@ export async function init() {
     library.base = (await getMeta('base')) || {};
     const folded = await getMeta('folds');
     if (folded && typeof folded === 'object' && !Array.isArray(folded)) folds = folded;
+    const cooking = await getMeta('kitchen');
+    if (cooking && typeof cooking === 'object' && !Array.isArray(cooking)) {
+      kitchen = {
+        steps: cooking.steps && typeof cooking.steps === 'object' && !Array.isArray(cooking.steps) ? cooking.steps : {},
+        timers: Array.isArray(cooking.timers) ? cooking.timers : [],
+      };
+    }
     const queue = await getMeta('queue');
     if (Array.isArray(queue)) state.queue = queue.filter((j) => j && j.id && Array.isArray(j.pictures));
     const actions = await getMeta('jobActions');
@@ -115,6 +126,34 @@ export async function deleteRecipe(id) {
     delete folds[id];
     await putMeta('folds', folds);
   }
+  if (id in kitchen.steps || kitchen.timers.some((t) => t && t.recipe === id)) {
+    delete kitchen.steps[id];
+    kitchen.timers = kitchen.timers.filter((t) => t && t.recipe !== id);
+    await putMeta('kitchen', kitchen);
+  }
+}
+
+/** The step a recipe's kitchen view was left at on this device, as a place in its steps, or null. */
+export function kitchenStep(id) {
+  return Number.isInteger(kitchen.steps[id]) ? kitchen.steps[id] : null;
+}
+
+/** Remembers on this device which step a recipe's kitchen view is at. The recipe is not touched. */
+export async function setKitchenStep(id, index) {
+  if (kitchen.steps[id] === index) return;
+  kitchen.steps[id] = index;
+  await putMeta('kitchen', kitchen);
+}
+
+/** The timers kept on this device, running or just finished, as they were last saved. */
+export function savedTimers() {
+  return kitchen.timers.map((t) => ({ ...t }));
+}
+
+/** Keeps the timers on this device, so that a reload or a trip to the Clock app finds them again. */
+export async function saveTimers(list) {
+  kitchen.timers = list.map((t) => ({ ...t }));
+  await putMeta('kitchen', kitchen);
 }
 
 /** The groups folded away on one recipe's page on this device, as a set of keys. */

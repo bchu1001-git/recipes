@@ -174,16 +174,78 @@ export function itemLabel(ing) {
 
 // ---------- times ----------
 
-/** Minutes for every time mentioned in a step, in order. A range such as "5 to 7 minutes" counts as its first number. */
+const FRACTION = { '¼': 1 / 4, '½': 1 / 2, '¾': 3 / 4, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 1 / 8, '⅜': 3 / 8, '⅝': 5 / 8, '⅞': 7 / 8 };
+// "1 1/2", "1/2", "1½", "1.5", "½": the ways a recipe writes how long.
+const TIME_NUM = `(?:\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+(?:\\.\\d+)?\\s?[${FRAC}]|\\d+(?:\\.\\d+)?|[${FRAC}])`;
+const TIME_UNIT = '(hours?|hrs?|minutes?|mins?|seconds?|secs?)';
+const TIME = new RegExp(`(${TIME_NUM})(?:\\s*(?:-|–|—|to|or)\\s*(${TIME_NUM}))?[\\s-]*(?:(?:more|additional|extra|full|whole)\\s+)?${TIME_UNIT}\\b`, 'gi');
+const TIME_MORE = new RegExp(`\\s*(?:and\\s+)?(${TIME_NUM})[\\s-]*${TIME_UNIT}\\b`, 'iy');   // "... 30 minutes" straight after "1 hour"
+const TIME_HALF = /\s+and\s+a\s+half\b/iy;                                                    // "... and a half" straight after "1 hour"
+const TIME_WORDS = /\b(an?\s+hour\s+and\s+a\s+half|(?:a\s+)?half(?:\s+an)?[\s-]+hour|an\s+hour)\b/gi;
+
+function timeNumber(written) {
+  const s = written.trim();
+  let m = /^(\d+)\s+(\d+)\/(\d+)$/.exec(s);
+  if (m) return Number(m[1]) + (Number(m[3]) ? Number(m[2]) / Number(m[3]) : 0);
+  m = /^(\d+)\/(\d+)$/.exec(s);
+  if (m) return Number(m[2]) ? Number(m[1]) / Number(m[2]) : 0;
+  const last = s[s.length - 1];
+  if (last in FRACTION) return (parseFloat(s) || 0) + FRACTION[last];
+  return parseFloat(s) || 0;
+}
+
+const perUnit = (unit) => (/^h/i.test(unit) ? 60 : /^s/i.test(unit) ? 1 / 60 : 1);
+
+/**
+ * Minutes for every time mentioned in a step, in the order they are written: one for each timer the
+ * kitchen view offers.
+ *
+ * - A range gives both ends, the short one first: "5 to 7 minutes" is 5 and 7, so the cook can look
+ *   early and then go on. "45 minutes to 1 hour" is 45 and 60.
+ * - Hours and minutes written together are one time: "1 hour 30 minutes" and "1 hour and a half" are 90.
+ * - "1 1/2 hours", "1½ hours", "half an hour" and "a 10-minute rest" are understood.
+ * - Anything shorter than a minute is left out; nobody sets a timer for "30 seconds". "90 seconds" is 2.
+ * - Nothing longer than a day is a timer.
+ */
 export function findTimers(text) {
-  const out = [];
-  const re = /(\d+(?:\.\d+)?)(?:\s*(?:-|–|to)\s*\d+(?:\.\d+)?)?\s*(hours?|hrs?|minutes?|mins?)\b/gi;
+  const s = String(text == null ? '' : text);
+  const found = [];
+  const add = (index, minutes) => {
+    const whole = Math.round(minutes);
+    if (minutes >= 1 && whole >= 1 && whole <= 24 * 60) found.push({ index, minutes: whole });
+  };
+
+  TIME.lastIndex = 0;
   let m;
-  while ((m = re.exec(String(text)))) {
-    const minutes = Math.round(parseFloat(m[1]) * (m[2][0].toLowerCase() === 'h' ? 60 : 1));
-    if (minutes > 0 && minutes <= 24 * 60) out.push(minutes);
+  while ((m = TIME.exec(s))) {
+    // "2.5 hours" must not also be read as "5 hours", nor "1/2 hour" as "2 hours".
+    if (m.index > 0 && /[\d./]/.test(s[m.index - 1])) continue;
+    const each = perUnit(m[3]);
+    let low = timeNumber(m[1]) * each;
+    const high = m[2] ? timeNumber(m[2]) * each : 0;
+    if (!m[2]) {
+      // Something smaller may follow and belong to the same time: "1 hour 30 minutes", "2 minutes 30 seconds".
+      TIME_MORE.lastIndex = TIME.lastIndex;
+      const more = TIME_MORE.exec(s);
+      if (more && perUnit(more[2]) < each) {
+        low += timeNumber(more[1]) * perUnit(more[2]);
+        TIME.lastIndex = TIME_MORE.lastIndex;
+      } else if (each === 60) {
+        TIME_HALF.lastIndex = TIME.lastIndex;
+        if (TIME_HALF.exec(s)) { low += 30; TIME.lastIndex = TIME_HALF.lastIndex; }
+      }
+    }
+    add(m.index, low);
+    if (high > low) add(m.index, high);
   }
-  return out;
+
+  TIME_WORDS.lastIndex = 0;
+  while ((m = TIME_WORDS.exec(s))) {
+    const words = m[1].toLowerCase();
+    add(m.index, /and\s+a\s+half/.test(words) ? 90 : /half/.test(words) ? 30 : 60);
+  }
+
+  return found.sort((a, b) => a.index - b.index).map((f) => f.minutes);
 }
 
 /** Turns "45", "45 min", "1 hr 15 min", "1.5 hours" or "1:30" into minutes. Returns null when there is no time in it. */
