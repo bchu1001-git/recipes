@@ -11,6 +11,9 @@
 //     site:  the site's name, when the page states one            (optional)
 //     at:    when it was saved, as an ISO time                    (optional, not used here)
 //     ld:    [the raw text of every <script type="application/ld+json"> on the page]
+//     groups: [{ name, items: [ingredient text] }], how the page's layout groups its ingredients,
+//            such as "For the salsa". The data in ld never says this.   (optional)
+//     s:     which version of the page script made the capture   (optional; missing means the first)
 //     text:  the page's visible text, kept for the AI reader      (optional, not used here)
 //   }
 //
@@ -20,7 +23,14 @@
 // are removed and entities decoded with string code only. Nothing here is ever parsed as HTML, and the
 // only link kept is one that starts with http or https.
 
-import { makeRecipe, parseDuration } from '../model.js';
+import { makeRecipe, parseDuration, HEADING_MAX } from '../model.js';
+
+/**
+ * The version of shortcuts/save-page.js that goes with this reader. Raise it, and the `s` the script
+ * writes, whenever the script learns to capture something new. A capture with a lower number, or
+ * none, came from a Shortcut whose script should be replaced.
+ */
+export const SCRIPT_VERSION = 2;
 
 // Limits, so that an odd or hostile page costs a moment at most.
 const MAX_BLOCKS = 60;          // ld+json blocks read from one capture
@@ -31,6 +41,7 @@ const MAX_FIELD = 200000;       // characters read from one field
 const MAX_LINES = 300;          // ingredients or steps kept
 const MAX_LINE = 3000;          // characters kept from one ingredient or step
 const MAX_TIPS = 40;            // tips kept for the notes
+const MAX_GROUPS = 40;          // ingredient groups read from one capture
 const MAX_TITLE = 200;
 const MAX_SHORT = 80;           // site name, serves
 
@@ -179,12 +190,78 @@ const tidyBrackets = (line) => line
   .replace(/\s*\(\s*\)/g, '')
   .trim();
 
+// Some pages write a half with the special fraction-slash character. A plain slash reads the same
+// and the amount can then be understood.
+const tidyIngredient = (line) => tidyBrackets(line.replace(/[\u2044\u2215]/g, '/'));
+
 function ingredientLines(node) {
   let lines = plainLines(node.recipeIngredient);
   if (!lines.length) lines = plainLines(node.ingredients);
-  // Some pages write a half with the special fraction-slash character. A plain slash reads the same
-  // and the amount can then be understood.
-  return lines.slice(0, MAX_LINES).map((l) => tidyBrackets(l.replace(/[\u2044\u2215]/g, '/'))).filter(Boolean);
+  return lines.slice(0, MAX_LINES).map(tidyIngredient).filter(Boolean);
+}
+
+// ---------- the groups the page's layout puts its ingredients in ----------
+
+// The share of the ingredients that must be found in the groups before the groups are used.
+const GROUPS_NEED = 0.8;
+
+/** Only the letters and digits, in lower case: an ingredient is the same one whatever its spacing or punctuation. */
+const bare = (line) => line.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+
+/**
+ * Puts a heading line ("For the salsa:") in front of each group of ingredients, when the page script
+ * saw groups in the page's layout. `groups` is [{ name, items: [ingredient text] }], in page order.
+ *
+ * The ingredients always stay exactly as the page's data gave them and in the same order: none is
+ * lost, repeated or moved, and the only change is the heading lines put between them. The groups are
+ * used only when at least four in five of the ingredients are found in them and the groups come in
+ * the same order as the ingredients. An ingredient found in no group stays where it is, which is
+ * ahead of the first heading or under the heading before it.
+ */
+function withGroups(lines, groups) {
+  if (!Array.isArray(groups) || !lines.length) return lines;
+  // Where each ingredient is. The same line can be there twice ("juice of 1/2 lime" for two parts).
+  const places = new Map();
+  lines.forEach((line, i) => {
+    const key = bare(line);
+    if (!places.has(key)) places.set(key, []);
+    places.get(key).push(i);
+  });
+  const groupOf = new Array(lines.length).fill(-1);
+  const names = [];
+  let found = 0;
+  for (const group of groups.slice(0, MAX_GROUPS)) {
+    if (!group || typeof group !== 'object' || !Array.isArray(group.items)) continue;
+    // A name too long to be a heading is not one; its ingredients then simply follow on.
+    const name = lineOf(group.name).replace(/[\s:]+$/, '');
+    names.push(name.length < HEADING_MAX ? name : '');
+    for (const item of group.items.slice(0, MAX_LINES)) {
+      const spots = places.get(bare(tidyIngredient(lineOf(item))));
+      const at = spots ? spots.find((i) => groupOf[i] === -1) : undefined;
+      if (at === undefined) continue;
+      groupOf[at] = names.length - 1;
+      found++;
+    }
+  }
+  if (found < lines.length * GROUPS_NEED) return lines;
+  // Walking down the ingredients, the groups must not go backwards. If they do, the page's layout and
+  // its data are in different orders, and a heading would land over the wrong ingredients.
+  let last = -1;
+  for (const group of groupOf) {
+    if (group === -1) continue;
+    if (group < last) return lines;
+    last = group;
+  }
+  const out = [];
+  let current = -1;
+  lines.forEach((line, i) => {
+    if (groupOf[i] !== -1 && groupOf[i] !== current) {
+      current = groupOf[i];
+      if (names[current]) out.push(names[current] + ':');
+    }
+    out.push(line);
+  });
+  return out;
 }
 
 const ONLY_A_LABEL = /^(?:step\s*)?\d{1,2}\s*[.):]?$/i;
@@ -243,13 +320,15 @@ function addSteps(value, out, tips, depth, alone) {
   }
   const inner = value.itemListElement ?? value.steps ?? value.step;
   if (inner != null) {
-    // A section ("For the sauce") holding its own steps. Its name goes in front of its first step,
-    // unless it is the only one or is just called "Instructions".
+    // A section ("For the sauce") holding its own steps. Its name becomes a heading line before them
+    // ("For the sauce:"), unless it is the only section or is just called "Instructions". A name too
+    // long to be a heading goes in front of the first step instead.
     const first = out.length;
     addSteps(inner, out, tips, depth + 1, false);
     const name = lineOf(value.name).replace(/[:.\s]+$/, '');
     if (name && out.length > first && !alone && !isA(value, 'howtostep') && !isA(value, 'itemlist') && !PLAIN_SECTION.test(name)) {
-      out[first] = (name + ': ' + out[first]).slice(0, MAX_LINE);
+      if (name.length < HEADING_MAX) out.splice(first, 0, name + ':');
+      else out[first] = (name + ': ' + out[first]).slice(0, MAX_LINE);
     }
     return;
   }
@@ -412,7 +491,7 @@ function read(capture, now) {
     source,
     minutes: minutesOf(best.node),
     serves: servesOf(best.node),
-    ingredients: best.ingredients,
+    ingredients: withGroups(best.ingredients, capture.groups),
     steps: best.steps,
     notes: { source: best.tips.join('\n') },
     review: true,

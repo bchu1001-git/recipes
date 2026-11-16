@@ -20,6 +20,11 @@ export const library = {
   base: {},           // { head, files: { path: hash } }
 };
 
+// How the recipe page is folded on this device: recipe id -> the groups folded away on its page.
+// This is a view choice, not part of any recipe. It is never synced, it changes no recipe's `updated`
+// time, and changing it does not count as a change to the library, so nobody listening is told.
+let folds = {};
+
 let db = null;
 const listeners = new Set();
 
@@ -74,6 +79,8 @@ export async function init() {
     const config = await getMeta('library');
     if (config && config.owner && config.repo && config.token) library.config = config;
     library.base = (await getMeta('base')) || {};
+    const folded = await getMeta('folds');
+    if (folded && typeof folded === 'object' && !Array.isArray(folded)) folds = folded;
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   } catch (err) {
     db = null;
@@ -98,6 +105,29 @@ export async function deleteRecipe(id) {
   changed();
   await run('recipes', 'readwrite', (s) => s.delete(id));
   await putMeta('deleted', state.deleted);
+  if (id in folds) {
+    delete folds[id];
+    await putMeta('folds', folds);
+  }
+}
+
+/** The groups folded away on one recipe's page on this device, as a set of keys. */
+export function foldsFor(id) {
+  return new Set(Array.isArray(folds[id]) ? folds[id] : []);
+}
+
+/**
+ * Remembers on this device that a group on a recipe's page is folded away, or no longer is.
+ * The recipe is not touched and nothing is synced. A key whose heading has since been renamed or
+ * removed just stops matching anything.
+ */
+export async function setFold(id, key, folded) {
+  const keys = foldsFor(id);
+  if (folded) keys.add(key);
+  else keys.delete(key);
+  if (keys.size) folds[id] = [...keys];
+  else delete folds[id];
+  await putMeta('folds', folds);
 }
 
 /** Saves the groups and folders. A folder that is present is no longer counted as deleted. */

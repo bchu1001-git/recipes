@@ -39,6 +39,75 @@ export function newFolderId(group, name) {
 const clean = (s) => (s == null ? '' : String(s).replace(/\s+/g, ' ').trim());
 const cleanBlock = (s) => (s == null ? '' : String(s).replace(/[ \t]+\n/g, '\n').trim());
 
+// ---------- headings ----------
+
+/** The longest line, colon included, that still counts as a heading. */
+export const HEADING_MAX = 60;
+
+/**
+ * A short line that ends with a colon is a heading, such as "For the salsa:". The rule is the same for
+ * ingredients and for steps, and it is all there is to it: the text is what decides, so a heading can
+ * be typed in the editor like any other line.
+ */
+export function isHeading(line) {
+  const text = clean(line);
+  return text.length <= HEADING_MAX && text.endsWith(':') && /[\p{L}\p{N}]/u.test(text);
+}
+
+/** A heading as the recipe page shows it: without the colon. */
+export function headingLabel(line) {
+  return clean(line).replace(/[\s:]+$/, '');
+}
+
+/**
+ * A list of ingredients or steps, split at its headings, for the recipe page.
+ * Returns [{ heading, label, key, lines: [{ index, number }] }]:
+ *   heading  the heading's place in the list, or -1 for the lines that come before any heading
+ *   label    the heading without its colon
+ *   key      a name for remembering this heading on a device: the label, with "#2" added when the
+ *            same label comes up a second time
+ *   lines    the lines under it, each with its place in the list and its number. Numbers count the
+ *            lines from 1 across the whole list and skip headings, so a step keeps its number
+ *            whether or not the part before it is folded away.
+ */
+export function partsOf(list) {
+  const parts = [];
+  const seen = new Map();
+  let part = null;
+  let number = 0;
+  (list || []).forEach((entry, index) => {
+    if (isHeading(entry.text)) {
+      const label = headingLabel(entry.text);
+      const times = (seen.get(label) || 0) + 1;
+      seen.set(label, times);
+      part = { heading: index, label, key: times > 1 ? label + '#' + times : label, lines: [] };
+      parts.push(part);
+      return;
+    }
+    if (!part) {
+      part = { heading: -1, label: '', key: '', lines: [] };
+      parts.push(part);
+    }
+    part.lines.push({ index, number: ++number });
+  });
+  return parts;
+}
+
+/**
+ * Makes an entry's `heading` mark agree with its text, whichever version of the app wrote the entry.
+ * The mark is there so that scaling, the shopping list and timers can skip headings without each
+ * working the rule out again.
+ */
+function markHeading(entry) {
+  if (!entry || typeof entry.text !== 'string') return entry;
+  const heading = isHeading(entry.text);
+  if (heading === (entry.heading === true)) return entry;
+  const { heading: was, ...rest } = entry;
+  if (!heading) return rest;
+  if (Array.isArray(rest.timers)) rest.timers = [];
+  return { ...rest, heading: true };
+}
+
 // ---------- ingredients ----------
 
 const FRAC = '¼½¾⅓⅔⅛⅜⅝⅞';
@@ -57,6 +126,7 @@ export function parseIngredient(line) {
   const text = clean(String(line).replace(/^\s*(?:[-*•–]|\d+[.)])\s+/, ''));
   const out = { text, qty: '', unit: '', item: text, note: '' };
   if (!text) return out;
+  if (isHeading(text)) return { ...out, heading: true };   // "For the salsa:" is not an ingredient
   let rest = text;
   const q = rest.match(QTY);
   if (q) {
@@ -134,6 +204,12 @@ export function parseDuration(input) {
   return found ? Math.round(total) : null;
 }
 
+/** A step from a line of text. A heading has no times in it to set a timer for. */
+export function parseStep(line) {
+  const text = clean(line);
+  return isHeading(text) ? { text, timers: [], heading: true } : { text, timers: findTimers(text) };
+}
+
 export function formatMinutes(minutes) {
   if (!minutes || minutes < 0) return '';
   const h = Math.floor(minutes / 60);
@@ -162,10 +238,10 @@ export function makeRecipe(input = {}, now = new Date().toISOString()) {
     minutes: minutes && minutes > 0 ? minutes : null,
     serves: clean(input.serves),
     ingredients: (input.ingredients || [])
-      .map((x) => (typeof x === 'string' ? parseIngredient(x) : x))
+      .map((x) => (typeof x === 'string' ? parseIngredient(x) : markHeading(x)))
       .filter((x) => x && x.text),
     steps: (input.steps || [])
-      .map((x) => (typeof x === 'string' ? { text: clean(x), timers: findTimers(x) } : x))
+      .map((x) => (typeof x === 'string' ? parseStep(x) : markHeading(x)))
       .filter((x) => x && x.text),
     notes: { mine: cleanBlock(notes.mine), source: cleanBlock(notes.source) },
     folders: [...new Set(input.folders || [])],
@@ -214,8 +290,9 @@ export function waitingRecipes(list) {
 /** What to check on a recipe that was read from somewhere else, worked out from the recipe itself. */
 export function reviewNotes(recipe) {
   const notes = [];
-  const steps = recipe.steps || [];
-  const ingredients = recipe.ingredients || [];
+  // Headings ("For the salsa:") are neither ingredients nor steps.
+  const steps = (recipe.steps || []).filter((s) => !isHeading(s.text));
+  const ingredients = (recipe.ingredients || []).filter((i) => !isHeading(i.text));
   if (!ingredients.length && !steps.length) {
     notes.push('No recipe was found on the page. Open it and type or paste the recipe here, or discard this.');
   } else {

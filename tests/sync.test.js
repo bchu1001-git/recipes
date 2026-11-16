@@ -5,6 +5,7 @@ import { createClient, GitHubError } from '../js/sync/github.js';
 import { syncLibrary, isCapture, captureId } from '../js/sync/sync.js';
 import { gitBlobSha } from '../js/sync/hash.js';
 import { makeRecipe, starterFolders } from '../js/model.js';
+import { SCRIPT_VERSION } from '../js/import/page.js';
 
 let clock = Date.parse('2026-01-01T00:00:00.000Z');
 const tick = () => new Date((clock += 60000)).toISOString();
@@ -479,4 +480,37 @@ test('inbox: the made-up examples and unknown fields are still handled as before
   assert.deepEqual(JSON.parse(hub.files().get('recipes/rfuture.json')).nutrition, { calories: 320 });
   assert.equal(phone.recipes.filter((r) => r.example).length, 1);
   assert.deepEqual(phone.titles(), ['From a newer app', 'Lentil soup']);
+});
+
+test('inbox: a page saved by an older Shortcut script is counted, so the person can be told', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  await phone.sync();
+  save(hub, 'inbox/a.json', page());                                             // the first script wrote no version
+  save(hub, 'inbox/b.json', page({ s: 1, title: 'Another | Maple Street Kitchen' }));
+  save(hub, 'inbox/c.json', page({ s: SCRIPT_VERSION, title: 'Current | Maple Street Kitchen' }));
+  save(hub, 'inbox/d.json', page({ s: 'nonsense', title: 'Odd | Maple Street Kitchen' }));
+  const out = await phone.sync();
+  assert.equal(out.added, 4);
+  assert.equal(out.outdated, 3);
+  // Nothing new in the inbox: nothing to say.
+  const quiet = await phone.sync();
+  assert.equal(quiet.added, 0);
+  assert.equal(quiet.outdated, 0);
+  // A page whose recipe already exists makes nothing, so it is not counted either.
+  save(hub, 'inbox/a.json', page());
+  const again = await phone.sync();
+  assert.equal(again.added, 0);
+  assert.equal(again.outdated, 0);
+});
+
+test('inbox: the groups a page showed arrive as heading lines in the recipe', async () => {
+  const hub = fakeGitHub();
+  const phone = device('Phone', hub);
+  await phone.sync();
+  save(hub, INBOX_FILE, page({ s: SCRIPT_VERSION, groups: [{ name: 'For the soup', items: ['1 cup lentils'] }, { name: 'To finish', items: ['1 onion, diced'] }] }));
+  await phone.sync();
+  const soup = phone.recipes.find((r) => r.title === 'Lentil soup');
+  assert.deepEqual(soup.ingredients.map((i) => i.text), ['For the soup:', '1 cup lentils', 'To finish:', '1 onion, diced']);
+  assert.deepEqual(JSON.parse(hub.files().get('recipes/' + soup.id + '.json')).ingredients.map((i) => !!i.heading), [true, false, true, false]);
 });

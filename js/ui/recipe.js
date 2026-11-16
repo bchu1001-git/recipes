@@ -1,10 +1,10 @@
 // One recipe: title, source, heart and rating, then Ingredients / Steps / Notes.
 // On a wide window the three parts sit side by side and the switch is hidden.
 
-import { h, icon, sheet, confirmSheet, go, toast } from './dom.js';
-import { state, subscribe, saveRecipe, deleteRecipe } from '../store.js';
+import { h, icon, sheet, confirmSheet, go, toast, paintChip } from './dom.js';
+import { state, subscribe, saveRecipe, deleteRecipe, foldsFor, setFold } from '../store.js';
 import { ui, setUi, ticksFor } from './state.js';
-import { amountLabel, itemLabel, formatMinutes, folderIndex, webLink } from '../model.js';
+import { amountLabel, itemLabel, formatMinutes, folderIndex, webLink, partsOf } from '../model.js';
 
 const TABS = [['ing', 'Ingredients'], ['steps', 'Steps'], ['notes', 'Notes']];
 
@@ -24,22 +24,20 @@ function menu(recipe) {
 /** Tick folders on and off for one recipe. Each tap is saved straight away. */
 export function folderPicker(id) {
   sheet('Folders', (close) => {
-    const body = h('div', { class: 'filter' });
-    const draw = () => {
-      const recipe = state.recipes.get(id);
-      if (!recipe) return;
-      body.replaceChildren(...state.folders.groups.filter((g) => g.folders.length).map((g) => h('div', { class: 'filter-group' },
-        h('h3', { class: 'label', text: g.name }),
-        h('div', { class: 'chips wrap' }, g.folders.map((f) => {
-          const on = recipe.folders.includes(f.id);
-          return h('button', { class: 'chip' + (on ? ' is-on' : ''), type: 'button', 'aria-pressed': String(on), onclick: async () => {
-            const folders = on ? recipe.folders.filter((x) => x !== f.id) : [...recipe.folders, f.id];
-            await saveRecipe({ ...recipe, folders });
-            draw();
-          } }, on ? icon('check') : null, f.name);
-        })))));
-    };
-    draw();
+    const has = (folder) => { const recipe = state.recipes.get(id); return !!recipe && recipe.folders.includes(folder); };
+    // Each chip is changed in place when tapped, so the sheet stays where it is.
+    const body = h('div', { class: 'filter' }, state.folders.groups.filter((g) => g.folders.length).map((g) => h('div', { class: 'filter-group' },
+      h('h3', { class: 'label', text: g.name }),
+      h('div', { class: 'chips wrap' }, g.folders.map((f) => {
+        const chip = h('button', { class: 'chip', type: 'button', onclick: async () => {
+          const recipe = state.recipes.get(id);
+          if (!recipe) return;
+          const folders = has(f.id) ? recipe.folders.filter((x) => x !== f.id) : [...recipe.folders, f.id];
+          await saveRecipe({ ...recipe, folders });
+          paintChip(chip, has(f.id), true);
+        } }, f.name);
+        return paintChip(chip, has(f.id), true);
+      })))));
     return [body, h('div', { class: 'sheet-actions' }, h('button', { class: 'btn btn-main', type: 'button', onclick: close }, 'Done'))];
   });
 }
@@ -55,10 +53,49 @@ function rating(recipe) {
   return wrap;
 }
 
+/**
+ * The items of the ingredient list or the step list. A heading ("For the salsa:") is a button that
+ * folds away the lines under it, up to the next heading, and shows them again. Lines above the first
+ * heading never fold. What is folded is remembered on this device only (see setFold in store.js).
+ * `line(entry, index, number)` draws one ordinary line.
+ */
+function foldingItems(recipe, list, where, line) {
+  const folded = foldsFor(recipe.id);
+  const items = [];
+  for (const part of partsOf(list)) {
+    const lines = part.lines.map(({ index, number }) => line(list[index], index, number));
+    if (part.heading === -1) {
+      items.push(...lines);
+    } else if (!lines.length) {
+      items.push(h('li', { class: 'part-head' }, h('h3', { text: part.label })));   // nothing under it to fold
+    } else {
+      const key = where + ':' + part.key;
+      const count = h('span', { class: 'part-fold-count' });
+      const button = h('button', { class: 'part-fold', type: 'button' },
+        h('span', { class: 'part-fold-label' }, part.label, count), icon('down', 'part-fold-arrow'));
+      const head = h('li', { class: 'part-head can-fold' }, h('h3', null, button));
+      const paint = (isFolded) => {
+        for (const li of lines) li.hidden = isFolded;
+        head.classList.toggle('is-folded', isFolded);
+        button.setAttribute('aria-expanded', String(!isFolded));
+        count.textContent = isFolded ? ' · ' + lines.length : '';   // how many lines it is hiding
+      };
+      button.addEventListener('click', () => {
+        const fold = button.getAttribute('aria-expanded') === 'true';
+        paint(fold);
+        setFold(recipe.id, key, fold);
+      });
+      paint(folded.has(key));
+      items.push(head, ...lines);
+    }
+  }
+  return items;
+}
+
 function ingredients(recipe) {
   if (!recipe.ingredients.length) return h('p', { class: 'quiet', text: 'No ingredients yet.' });
   const ticks = ticksFor(recipe.id);
-  return h('ul', { class: 'ing' }, recipe.ingredients.map((ing, i) => {
+  return h('ul', { class: 'ing' }, foldingItems(recipe, recipe.ingredients, 'ing', (ing, i) => {
     const li = h('li', { class: ticks.has(i) ? 'is-done' : '' },
       h('button', { class: 'ing-row', type: 'button', 'aria-pressed': String(ticks.has(i)), onclick: () => {
         if (ticks.has(i)) ticks.delete(i); else ticks.add(i);
@@ -74,7 +111,8 @@ function ingredients(recipe) {
 
 function steps(recipe) {
   if (!recipe.steps.length) return h('p', { class: 'quiet', text: 'No steps yet.' });
-  return h('ol', { class: 'steps' }, recipe.steps.map((s) => h('li', { text: s.text })));
+  // Each step carries its own number, so the numbers stay the same whatever is folded away.
+  return h('ol', { class: 'steps' }, foldingItems(recipe, recipe.steps, 'steps', (s, i, number) => h('li', { 'data-n': String(number), text: s.text })));
 }
 
 function notes(recipe) {

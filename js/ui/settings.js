@@ -2,7 +2,7 @@
 
 import { h, icon, sheet, confirmSheet, toast } from './dom.js';
 import { state, library, subscribe, saveFolders, removeFolder, saveRecipe, deleteRecipe, exportAll, importAll } from '../store.js';
-import { status, onStatus, syncNow, connect, disconnect, explain, ago } from '../sync/auto.js';
+import { status, onStatus, syncNow, connect, disconnect, explain, ago, scriptIsOld } from '../sync/auto.js';
 import { newFolderId } from '../model.js';
 import { EXAMPLES } from '../sample.js';
 import { BUILD } from '../version.js';
@@ -195,7 +195,10 @@ export function renderSettings(root) {
           h('p', { class: 'set-note', text: library.config
             ? 'Put Save to Recipes in Safari\u2019s share sheet. A recipe page you are reading then lands here, under To review.'
             : 'Saving a recipe page from Safari writes it into your library, so connect a library first.' }),
-          library.config ? h('a', { class: 'btn btn-quiet', href: '#/save' }, 'Set up Save to Recipes') : null),
+          library.config && scriptIsOld()
+            ? h('p', { class: 'set-note', text: 'A page was saved by a Shortcut with an older script. The steps screen shows how to put the new one in.' })
+            : null,
+          library.config ? h('a', { class: 'btn btn-quiet', href: '#/save' }, 'Set up or update Save to Recipes') : null),
 
         h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Backup' }),

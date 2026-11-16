@@ -1,7 +1,7 @@
 // Adding a recipe by hand, and editing one. Ingredients and steps are typed one per line.
 // The review screen (review.js) shows the same fields for a recipe that arrived from outside.
 
-import { h, icon, go } from './dom.js';
+import { h, go, paintChip } from './dom.js';
 import { state, saveRecipe } from '../store.js';
 import { linesOf, splitLines, formatMinutes } from '../model.js';
 
@@ -21,27 +21,26 @@ export function recipeFields(existing) {
 
   const title = input('title', existing && existing.title, { required: true, enterkeyhint: 'next' });
   const problem = h('p', { class: 'field-error', role: 'alert' });
-  const folders = h('div', { class: 'filter' });
-  const drawFolders = () => {
-    folders.replaceChildren(...state.folders.groups.filter((g) => g.folders.length).map((g) => h('div', { class: 'filter-group' },
-      h('h3', { class: 'label', text: g.name }),
-      h('div', { class: 'chips wrap' }, g.folders.map((f) => {
-        const on = picked.has(f.id);
-        return h('button', { class: 'chip' + (on ? ' is-on' : ''), type: 'button', 'aria-pressed': String(on), onclick: () => {
-          if (on) picked.delete(f.id); else picked.add(f.id);
-          drawFolders();
-        } }, on ? icon('check') : null, f.name);
-      })))));
-  };
-  drawFolders();
+  // Each chip is changed in place when tapped, so the screen stays where it is.
+  const folders = h('div', { class: 'filter' }, state.folders.groups.filter((g) => g.folders.length).map((g) => h('div', { class: 'filter-group' },
+    h('h3', { class: 'label', text: g.name }),
+    h('div', { class: 'chips wrap' }, g.folders.map((f) => {
+      const chip = h('button', { class: 'chip', type: 'button', onclick: () => {
+        if (picked.has(f.id)) picked.delete(f.id); else picked.add(f.id);
+        paintChip(chip, picked.has(f.id), true);
+      } }, f.name);
+      return paintChip(chip, picked.has(f.id), true);
+    })))));
 
   const nodes = [
     field('Title', title), problem,
     h('div', { class: 'field-pair' },
       field('Time', input('time', existing ? formatMinutes(existing.minutes) : '', { placeholder: '45 min', inputmode: 'text' })),
       field('Serves', input('serves', existing && existing.serves, { placeholder: '4' }))),
-    field('Ingredients', area('ingredients', existing ? linesOf(existing.ingredients) : '', 8), 'One per line, written the way you would say it: 2 carrots, sliced'),
-    field('Steps', area('steps', existing ? linesOf(existing.steps) : '', 8), 'One per line'),
+    field('Ingredients', area('ingredients', existing ? linesOf(existing.ingredients) : '', 8),
+      'One per line, written the way you would say it: 2 carrots, sliced. A line that ends with a colon becomes a heading: For the salsa:'),
+    field('Steps', area('steps', existing ? linesOf(existing.steps) : '', 8),
+      'One step per line. The recipe page numbers them. A line that ends with a colon becomes a heading.'),
     field('My notes', area('mine', existing && existing.notes.mine, 3)),
     field('Where it came from', input('source', existing && existing.source.name, { placeholder: 'A cookbook, a person, a site' })),
     field('Link', input('url', existing && existing.source.url, { type: 'url', inputmode: 'url', placeholder: 'https://' })),

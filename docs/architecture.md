@@ -40,8 +40,8 @@ title
 source     { kind: manual | web | screenshot | photo | shared, name, url }
 minutes    total time, or null
 serves     text, as written
-ingredients  [{ text, qty, unit, item, note }]   text is the line as written
-steps        [{ text, timers: [minutes] }]
+ingredients  [{ text, qty, unit, item, note, heading }]   text is the line as written
+steps        [{ text, timers: [minutes], heading }]
 notes      { mine, source }
 folders    ["group:folder", ...]
 goto       true for the version that gets cooked
@@ -55,6 +55,28 @@ created, updated, by
 Each ingredient is kept two ways on purpose. `text` is what was written and is what the editor shows.
 `qty`, `unit` and `item` are for scaling, unit conversion, the pantry list and the shopping list
 later.
+
+### Headings and folding
+
+A line that ends with a colon and is at most 60 characters long is a heading, such as "For the
+salsa:". The rule is the same among the ingredients and among the steps (`isHeading` in
+`js/model.js`), and the text is all that decides. `heading: true` is set from the text every time a
+recipe is saved, so that scaling, the shopping list and timers can skip headings; a version of the
+app that knows nothing of headings just shows the line. In the editor and on the review screen a
+heading is that line and nothing more.
+
+On the recipe page a heading is drawn without its colon, with no tick circle and no number, and it is
+a button. A tap folds away the lines under it, up to the next heading, and the heading then says how
+many lines it is hiding ("For the salsa · 9"); another tap brings them back. Lines above the first
+heading belong to no group and never fold. Each step carries its own number, counted across the
+whole list (`partsOf`), so the numbers never move when something is folded.
+
+What is folded is a view choice for one device. It is kept in that device's `meta` store under
+`folds`, by recipe and by heading (`foldsFor` and `setFold` in `js/store.js`). It is never written
+into the recipe and never synced, it changes no `updated` time, and changing it does not count as a
+change to the library, so folding the salsa on one phone hides nothing on another. A fold whose
+heading has been renamed or removed simply stops applying. Deleting a recipe on a device drops its
+record there; a recipe removed by a sync can leave one behind, which does no harm.
 
 ### Folders
 
@@ -134,7 +156,7 @@ Code: `js/sync/`. `sync.js` and `merge.js` work on plain data, so the tests run 
 
 ## Getting recipes in
 
-- **From Safari (built, apart from proving the Shortcut on a phone):** the "Save to Recipes" Shortcut
+- **From Safari (built, and run on an iPhone):** the "Save to Recipes" Shortcut
   runs a short script on the open page, takes the schema.org Recipe data, and writes it into the
   library's `inbox/` as a capture (described below). The app turns that into a recipe itself at its
   next sync, so nothing waits for GitHub and no AI is involved.
@@ -161,6 +183,8 @@ title   the page's title
 site    the site's name, when the page states one                 (optional)
 at      when it was saved, as an ISO time                         (optional)
 ld      the raw text of every <script type="application/ld+json"> block on the page
+groups  [{ name, items: [ingredient] }]: how the page's layout groups its ingredients   (optional)
+s       which version of the page script made the capture         (optional; missing means the first)
 text    the page's visible text, for the AI reader later          (optional, not used yet)
 ```
 
@@ -175,8 +199,16 @@ the Shortcut. The reader skips a block it cannot parse, after trying the usual r
   the title, ingredients, steps, total time, servings, the site's name and the link. The story,
   pictures, ratings and nutrition are left out.
 - Steps may arrive as one block of text, numbered text, HTML, a list of strings, or step and section
-  objects. A section's name goes in front of its first step. Tips listed among the steps, and lines
+  objects. A section's name becomes a heading line before its steps. Tips listed among the steps, and lines
   such as "Do ahead:" or "Editor's note:", go to `notes.source` instead of the steps.
+- `groups` puts a heading line ("For the salsa:") in front of each group of ingredients. A page's
+  data lists its ingredients in one flat run; only its layout shows what belongs to what, so the page
+  script reads the groups there and the reader matches them to the data's ingredients by their
+  letters and digits. The ingredients themselves stay exactly as the data gave them and in the same
+  order: none is lost, repeated or moved, and the only change is the heading lines put between them.
+  The groups are used only when at least four in five of the ingredients are found in them and the
+  groups come in the same order as the ingredients. An ingredient found in no group stays where it
+  is: ahead of the first heading, or under the heading before it.
 - `found` is false when the page carries no such data. The recipe is then only the page's title and
   link, for the person to fill in.
 - `problems` holds short sentences for the review screen, such as "No steps were found".
@@ -197,7 +229,7 @@ HTML, which is not written yet.
 
 ### The page script and the Shortcut
 
-`shortcuts/save-page.js` is the script the Shortcut's "Run JavaScript on Webpage" action runs on the
+`shortcuts/save-page.js` is the script the Shortcut's "Run JavaScript on Web Page" action runs on the
 page open in Safari. It builds a capture and hands it to the Shortcut as base64 of plain JSON, which
 is exactly what GitHub's "create a file" call takes as `content`.
 
@@ -205,15 +237,31 @@ is exactly what GitHub's "create a file" call takes as `content`.
   always fits; a block that would push it over is left out.
 - If no block holds a Recipe, schema.org microdata in the page is translated into one. Where that
   markup leaves the steps out, the part of the recipe named for its directions is read as the steps.
+- It works out the groups the page shows its ingredients in, without knowing any one site. Each
+  ingredient in the page's data is looked up on the page by its words; the part of the page that
+  holds at least four in five of them is the ingredients area; and walking down that area, the
+  heading before an ingredient names its group. A heading is an h1 to h6, or a short line of its own
+  that is bold or is named as a heading or group; "Ingredients", a serving size and the like are
+  not headings, and one heading over everything is not a group. This covers headings that sit
+  between the items of one list, a heading before each separate list, and a list item that is only
+  a bold line.
 - It reads the one page and nothing else, changes nothing, and cannot throw: on any error it still
   hands over the page's address and title.
 - It is plain ASCII, so pasting it into Shortcuts cannot change it. `tests/save-page.test.js` runs it
   against a pretend page.
 
-The Shortcut has four actions: Run JavaScript on Webpage (the script); Format Date (the file name,
-`yyyyMMdd-HHmmss`); Get Contents of URL (a PUT to `.../contents/inbox/<name>.json` on `api.github.com`
-with an `Authorization: Bearer` header and a JSON body of `message` and `content`); Show Result. It
+The Shortcut has four actions: Run JavaScript on Web Page (the script); Random Number (the file
+name, which only has to be one that is not in use); Get Contents of URL (a PUT to
+`.../contents/inbox/<number>.json` on `api.github.com` with an `Authorization: Bearer` header and a
+JSON body of `message` and `content`); Show Content, which older versions of iOS call Show Result. It
 holds a key of its own, limited to the library, so it can be cancelled without touching the app's key.
+
+The script inside a Shortcut does not change when the app does. The capture's `s` says which version
+of the script made it, and `SCRIPT_VERSION` in `js/import/page.js` is the version the app goes with;
+raise both together. When a sync turns a capture from an older script into a recipe, the app says so
+once, and Settings and the steps screen keep a note until a capture from the current script arrives
+(`scriptIsOld` in `js/sync/auto.js`, kept in the device's local storage). The steps screen has a
+section on replacing the script.
 
 It is made by hand on each iPhone. The steps, with the library's own address filled in and a Copy
 button for every piece of text, are in the app: Settings, Save from Safari (`js/ui/save.js`, the
@@ -244,7 +292,7 @@ recipient's "Save to Recipes" Shortcut can save it.
 | --- | --- |
 | Do popular recipe sites answer an automatic request? | Tested November 2026: 13 of 25 gave full recipe data, 11 refused, 1 used an older format |
 | Can a Home Screen web app start a Clock timer through a Shortcut? | Proven November 2026 on an iPhone with `proofs/timer.html`: the timer starts and rings with the phone locked. The phone is left in Shortcuts afterwards. Asking Shortcuts to come back opens the page in Safari, not the Home Screen app, so the kitchen view should use the plain link and let the person return |
-| Can a Shortcut read a recipe page and write into a library? | To test on a phone, with the steps in Settings, Save from Safari. The page script on its own was run on three live recipe pages in a desktop browser in November 2026, one of them with only the older in-page markup, and the reader made a full recipe from each |
+| Can a Shortcut read a recipe page and write into a library? | Proven November 2026 on an iPhone with iOS 27: a page shared from Safari arrived under To review. Format Date could not be set up on that phone, so the file is named with a random number, and Show Result is called Show Content there. The page script was also run in a desktop browser on saved copies of ten live recipe pages, with their styles and without their own scripts: the three that group their ingredients gave the right groups, and the seven that do not gave none |
 | Does the web-page reader cope with real recipe pages? | Tested November 2026 on saved copies of one recipe page from each of 23 sites: 22 gave a full recipe; 1 had only the older in-page markup and gave a title and link |
 | Does the free AI reader cope with the owner's own screenshots? | To test |
 | Does syncing work against real GitHub? | Proven November 2026: an iPhone connected to an empty private library and synced |

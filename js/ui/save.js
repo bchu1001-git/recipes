@@ -1,14 +1,15 @@
-// How to make the "Save to Recipes" Shortcut, step by step, with every piece of text ready to copy.
-// The Shortcut runs shortcuts/save-page.js on the page open in Safari and writes the result into the
-// connected library's inbox/. The next sync turns it into a recipe under To review.
+// How to make the "Save to Recipes" Shortcut, step by step, with every piece of text ready to copy,
+// and how to put a newer script into it later. The Shortcut runs shortcuts/save-page.js on the page
+// open in Safari and writes the result into the connected library's inbox/. The next sync turns it
+// into a recipe under To review. The steps were corrected against a run on an iPhone with iOS 27.
 //
 // The key this device uses is never shown or copied here. The Shortcut gets a key of its own.
 
 import { h, icon, toast } from './dom.js';
 import { library, subscribe } from '../store.js';
+import { scriptIsOld } from '../sync/auto.js';
 
 const SCRIPT = 'shortcuts/save-page.js';
-const FILE_NAME = 'yyyyMMdd-HHmmss';
 
 async function copy(text) {
   try {
@@ -34,6 +35,7 @@ function piece(text, label) {
 
 const b = (text) => h('b', { text });
 const p = (...kids) => h('p', null, ...kids);
+const note = (...kids) => h('p', { class: 'set-note' }, ...kids);
 const step = (title, ...kids) => h('li', { class: 'howto-step' }, h('h3', { text: title }), ...kids);
 
 export function renderSaveSetup(root) {
@@ -63,11 +65,22 @@ export function renderSaveSetup(root) {
       + '&description=' + encodeURIComponent('Lets the Save to Recipes Shortcut add pages to the library')
       + '&target_name=' + encodeURIComponent(config.owner) + '&expires_in=none&contents=write';
 
+    const copyScript = () => (script
+      ? h('button', { class: 'btn btn-main', type: 'button', onclick: () => copy(script) }, 'Copy the script')
+      : p(failed ? 'The script could not be loaded. Check the connection, then open this screen again.' : 'Loading the script...'));
+
     root.replaceChildren(h('div', { class: 'pane-scroll' }, bar,
       h('div', { class: 'settings' },
         h('p', { class: 'set-note' },
           'This puts ', b('Save to Recipes'), ' in Safari\'s share sheet. Tap it on a recipe page and the recipe is written into your library, then shows up here under To review. You make the Shortcut once, by hand, on this iPhone. It takes about ten minutes.'),
-        h('p', { class: 'howto-note', text: 'This is a first try. It has not been run on a real phone yet, and Shortcuts names things a little differently from one iOS version to the next. Where a step does not match what you see, note what you see instead.' }),
+        scriptIsOld()
+          ? h('p', { class: 'howto-note', role: 'note', text: 'A page was saved by a Shortcut with an older script. It still works, but it misses what the new script reads, such as the groups a page puts its ingredients in. Update the script, further down, takes a minute.' })
+          : null,
+        h('p', { class: 'howto-note', text: 'These steps were run on an iPhone with iOS 27 in November 2026. Shortcuts names things a little differently from one iOS version to the next, so where a step does not match what you see, look for the closest name.' }),
+
+        h('section', { class: 'set' },
+          h('h2', { class: 'label', text: 'Putting a variable in a field' }),
+          note('Two fields below need a variable: a blue bubble that stands for the result of an earlier action. Tap the field, then look at the row just above the keyboard and tap the variable that is named. If it is not in that row, tap ', b('Select Variable'), ' and then tap the result shown under the action it comes from.')),
 
         h('ol', { class: 'howto' },
           step('Let Shortcuts run scripts',
@@ -77,33 +90,32 @@ export function renderSaveSetup(root) {
             p('Open the ', b('Shortcuts'), ' app and tap ', b('+'), '. Tap the name at the top, choose ', b('Rename'), ', and call it ', b('Save to Recipes'), '.')),
 
           step('Put it in Safari\'s share sheet',
-            p('Tap the ', b('i'), ' button to open the details and turn on ', b('Show in Share Sheet'), '. A row that begins with ', b('Receive'), ' appears at the top of the Shortcut.'),
-            p('Tap the list of kinds in that row and switch off every kind except ', b('Safari webpages'), '.')),
+            p('This is a setting of the Shortcut, not an action, so it is not in the action search. Close the search if it is open. At the bottom of the Shortcut\'s screen there is a small ', b('i'), ' in a circle. Tap it to open ', b('Details'), ', turn on ', b('Show in Share Sheet'), ', then tap ', b('Done'), ' or the tick.'),
+            p('A row that begins with ', b('Receive'), ' appears at the top of the Shortcut. Tap the list of kinds in that row and switch off every kind except ', b('Safari web pages'), '.')),
 
           step('Read the page',
-            p('Search the actions for ', b('Run JavaScript on Webpage'), ' and add it. It should say it runs on ', b('Shortcut Input'), '.'),
+            p('Search the actions for ', b('Run JavaScript on Web Page'), ' and add it. It should say it runs on ', b('Shortcut Input'), '.'),
             p('Delete the sample script inside it and paste this one in its place:'),
-            script
-              ? h('button', { class: 'btn btn-main', type: 'button', onclick: () => copy(script) }, 'Copy the script')
-              : p(failed ? 'The script could not be loaded. Check the connection, then open this screen again.' : 'Loading the script...'),
+            copyScript(),
             script ? h('details', { class: 'howto-code' }, h('summary', { text: 'Read the script' }), h('pre', { text: script })) : null,
-            p('The script only reads the page you share. It collects the recipe data that the page carries about itself and hands it to the Shortcut.')),
+            p('The script only reads the page you share. It collects the recipe data that the page carries about itself, and the groups the page puts its ingredients in, and hands them to the Shortcut.')),
 
-          step('Name the file',
-            p('Add the action ', b('Format Date'), '. Its date should be ', b('Current Date'), '. Set ', b('Date Format'), ' to ', b('Custom'), ' and paste this as the ', b('Format String'), ':'),
-            piece(FILE_NAME, 'the file name pattern')),
+          step('Give the file a name',
+            p('Each saved page needs a file name that has not been used before, and a random number does that. Search the actions for ', b('Random Number'), ' and add it. It reads "Random number between ... and ...". Tap the first value and type the first number below, then tap the second and type the other.'),
+            piece('100000', 'the smallest number'),
+            piece('999999999', 'the largest number')),
 
           step('Send it to your library',
             p('Add the action ', b('Get Contents of URL'), '.'),
             h('ul', { class: 'howto-list' },
-              h('li', null, p(b('URL:'), ' paste this, then right after it insert the variable ', b('Formatted Date'), ', then type ', b('.json')), piece(address, 'the address')),
+              h('li', null, p(b('URL:'), ' paste this. With the cursor at its end, put in the variable ', b('Random Number'), ', then type ', b('.json'), '. It ends up as the address, a blue Random Number bubble, then .json'), piece(address, 'the address')),
               h('li', null, p('Tap ', b('Show More'), ' and set ', b('Method'), ' to ', b('PUT'), '.')),
               h('li', null, p(b('Headers:'), ' add one. Its key is:'), piece('Authorization'),
-                p('Its text is the word below, then a space. The key goes after that space, in the next step.'), piece('Bearer')),
+                p('Its text is the word below, then a space. A key goes after that space, and it is a new one that you make in the next step: not the key this app uses, and not the key you publish with.'), piece('Bearer')),
               h('li', null, p(b('Request Body:'), ' choose ', b('JSON'), '. Add a ', b('Text'), ' field with this key:'), piece('message'),
                 p('and this text:'), piece('Saved from Safari')),
               h('li', null, p('Add a second ', b('Text'), ' field with this key:'), piece('content'),
-                p('For its text, insert the variable that holds the result of ', b('Run JavaScript on Webpage'), ' from step 4.')))),
+                p('For its text, put in the variable that holds the result of ', b('Run JavaScript on Web Page'), ' from step 4.')))),
 
           // The key comes last on purpose: GitHub shows it once, and copying anything else afterwards
           // would push it off the clipboard before it is pasted.
@@ -115,20 +127,31 @@ export function renderSaveSetup(root) {
             p('The key is now inside the Shortcut, so do not share the Shortcut with anyone. Someone else who wants it makes their own, with their own key.')),
 
           step('Show what GitHub answered',
-            p('Add the action ', b('Show Result'), ' and make sure it shows ', b('Contents of URL'), '. Then tap ', b('Done'), '.')),
+            p('Add the action ', b('Show Content'), ', which older versions call ', b('Show Result'), ', and make sure it shows ', b('Contents of URL'), '. Then tap ', b('Done'), '.')),
 
           step('Try it',
             p('Open a recipe in Safari, tap ', b('Share'), ', and choose ', b('Save to Recipes'), '. It may be far down the list.'),
             p('The first time, the phone asks whether the Shortcut may read the page and whether it may connect to api.github.com. Allow both.'),
-            p('A result then appears. If it mentions content and commit, the page was saved. If it shows a message instead, GitHub refused it, and the message says why. Come back to Recipes, pull the list down to sync, and look for ', b('To review'), ' at the top.'))),
+            p('A result then appears. If it mentions content and commit, the page was saved. Come back to Recipes, pull the list down to sync, and look for ', b('To review'), ' at the top.'))),
 
         h('section', { class: 'set' },
-          h('h2', { class: 'label', text: 'What to tell me' }),
+          h('h2', { class: 'label', text: 'If the result shows a message instead' }),
+          note('GitHub refused the page, and the message says why.'),
           h('ul', { class: 'howto-ask' },
-            h('li', { text: 'Which steps did not match what you saw, and what you saw instead.' }),
-            h('li', { text: 'What the result in step 9 said: the first line or two is enough.' }),
-            h('li', { text: 'Whether the recipe showed up under To review after a sync.' }),
-            h('li', { text: 'Whether it also worked on a second recipe site.' }))))));
+            h('li', { text: 'Bad credentials: the key was not pasted whole, has no space before it, or has been cancelled.' }),
+            h('li', { text: 'Not Found: the key cannot reach this library. Check its Resource owner and its repository, and the address in the URL.' }),
+            h('li', { text: 'Resource not accessible: the key can read but not write. Contents must say Read and write.' }),
+            h('li', { text: 'A message about "sha": a file with that number is already there, which is rare. Save the page again.' }))),
+
+        h('section', { class: 'set' },
+          h('h2', { class: 'label', text: 'Update the script' }),
+          note('When the app learns to read more from a page, the script changes, and the Shortcut keeps the old one until you replace it. The app says so after a sync that brings in a page saved by an older script.'),
+          h('ol', { class: 'howto-ask howto-count' },
+            h('li', { text: 'Copy the new script with the button below.' }),
+            h('li', { text: 'Open the Shortcuts app and open Save to Recipes for editing: the three dots on it.' }),
+            h('li', { text: 'In Run JavaScript on Web Page, tap inside the script, choose Select All, and delete it.' }),
+            h('li', { text: 'Paste, then tap Done. Nothing else in the Shortcut changes.' })),
+          copyScript()))));
     root.querySelector('.pane-scroll').scrollTop = keep;
   };
 

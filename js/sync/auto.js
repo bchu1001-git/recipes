@@ -8,9 +8,23 @@ import { syncLibrary } from './sync.js';
 
 /**
  * state: 'off' (no library), 'idle', 'syncing' or 'error'. `at` is the time of the last good sync.
- * `toReview` is how many recipes that sync brought to this device to be reviewed.
+ * `toReview` is how many recipes that sync brought to this device to be reviewed. `scriptNote` is
+ * true on the one sync that first notices a Shortcut saving pages with an out-of-date script.
  */
-export const status = { state: 'off', at: null, message: '', sent: 0, received: 0, toReview: 0 };
+export const status = { state: 'off', at: null, message: '', sent: 0, received: 0, toReview: 0, scriptNote: false };
+
+// Whether the last page this device turned into a recipe was saved by an out-of-date Shortcut script.
+// It is kept on the device so the person is told once, and so the setup screen can go on saying so
+// until a page arrives from the current script.
+const OLD_SCRIPT = 'recipes.oldScript';
+export function scriptIsOld() {
+  try { return localStorage.getItem(OLD_SCRIPT) === '1'; } catch (err) { return false; }
+}
+function rememberScript(old) {
+  try {
+    if (old) localStorage.setItem(OLD_SCRIPT, '1'); else localStorage.removeItem(OLD_SCRIPT);
+  } catch (err) { /* nowhere to keep it: the note just shows again next time */ }
+}
 
 const listeners = new Set();
 export function onStatus(fn) {
@@ -67,7 +81,11 @@ export async function syncNow() {
     await applySync(out, snap);
     await saveBase(out.base);
     const toReview = out.recipes.filter((r) => r.review && !snap.seen.has(r.id)).length;
-    set({ state: 'idle', at: Date.now(), message: '', sent: out.sent, received: out.received, toReview });
+    // Pages from an older script: say so the first time. Pages from the current one: the note is over.
+    const scriptNote = out.outdated > 0 && !scriptIsOld();
+    if (out.outdated > 0) rememberScript(true);
+    else if (out.added > 0) rememberScript(false);
+    set({ state: 'idle', at: Date.now(), message: '', sent: out.sent, received: out.received, toReview, scriptNote });
     ok = true;
   } catch (err) {
     unsent = true;
@@ -93,7 +111,7 @@ export async function connect({ owner, repo, token, device }) {
 export async function disconnect() {
   clearTimeout(timer);
   await forgetLibrary();
-  set({ state: 'off', at: null, message: '', sent: 0, received: 0, toReview: 0 });
+  set({ state: 'off', at: null, message: '', sent: 0, received: 0, toReview: 0, scriptNote: false });
 }
 
 export function startAutoSync() {

@@ -2,7 +2,7 @@
 // On a wide window the same filters also appear as a sidebar.
 // Recipes that arrived from outside wait under "To review" until they are kept or discarded.
 
-import { h, icon, sheet, go } from './dom.js';
+import { h, icon, sheet, go, paintChip } from './dom.js';
 import { state, library, subscribe, saveRecipe } from '../store.js';
 import { status, onStatus, syncNow, ago } from '../sync/auto.js';
 import { ui, onUi, setUi, toggleFilter, clearFilters } from './state.js';
@@ -55,13 +55,18 @@ function row(recipe) {
 function openFilters() {
   let stop = () => {};
   sheet('Filter', (close) => {
-    const body = h('div', { class: 'filter' });
+    // The chips are made once and changed in place, so the sheet stays where it is when one is tapped.
+    const chips = new Map();
+    const body = h('div', { class: 'filter' }, state.folders.groups.filter((g) => g.folders.length).map((g) => h('div', { class: 'filter-group' },
+      h('h3', { class: 'label', text: g.name }),
+      h('div', { class: 'chips wrap' }, g.folders.map((f) => {
+        const c = chip(f.name, ui.filters.has(f.id), () => toggleFilter(f.id));
+        chips.set(f.id, c);
+        return c;
+      })))));
     const show = h('button', { class: 'btn btn-main', type: 'button', onclick: close });
     const draw = () => {
-      body.replaceChildren(
-        ...state.folders.groups.filter((g) => g.folders.length).map((g) => h('div', { class: 'filter-group' },
-          h('h3', { class: 'label', text: g.name }),
-          h('div', { class: 'chips wrap' }, g.folders.map((f) => chip(f.name, ui.filters.has(f.id), () => toggleFilter(f.id)))))));
+      for (const [id, c] of chips) paintChip(c, ui.filters.has(id), false);
       const n = visibleRecipes().length;
       show.textContent = 'Show ' + n + (n === 1 ? ' recipe' : ' recipes');
     };
@@ -138,7 +143,9 @@ export function renderHome(root) {
   root.replaceChildren(scroller, h('a', { class: 'fab', href: '#/new', 'aria-label': 'Add a recipe' }, icon('plus')));
   pullToSync(scroller, hint);
 
+  let shown = '';   // which search and filters the list was last drawn for
   const draw = () => {
+    const at = scroller.scrollTop;
     const total = kept().length;
     const toCheck = waiting();
     const reviewing = ui.reviewing && toCheck.length > 0;
@@ -188,6 +195,11 @@ export function renderHome(root) {
       const note = filtering ? [h('p', { class: 'rows-note', text: list.length + ' of ' + total })] : [];
       rows.replaceChildren(...note, ...list.map(row));
     }
+    // The same list drawn again (after a sync, a heart, another recipe opened) stays where it was.
+    // A different search or filter is a different list, and is left to start where the browser puts it.
+    const now = JSON.stringify([ui.query, [...ui.filters].sort(), ui.gotoOnly, reviewing]);
+    if (now === shown) scroller.scrollTop = at;
+    shown = now;
   };
 
   subscribe(draw);
@@ -208,6 +220,9 @@ export function renderSide(root) {
     const reviewing = ui.reviewing && toCheck.length > 0;
     const gotos = all.filter((r) => r.goto).length;
     const nothing = !reviewing && !ui.gotoOnly && ui.filters.size === 0;
+    // The sidebar is drawn again after every change, so its place has to be put back by hand.
+    const scrolled = root.querySelector('.side-scroll');
+    const keep = scrolled ? scrolled.scrollTop : 0;
     root.replaceChildren(
       h('div', { class: 'side-scroll' },
         toCheck.length ? item('To review', toCheck.length, reviewing, () => (reviewing ? setUi({ reviewing: false }) : openReview())) : null,
@@ -217,6 +232,7 @@ export function renderSide(root) {
           h('h2', { class: 'label', text: g.name }),
           g.folders.map((f) => item(f.name, countIn(f.id), ui.filters.has(f.id) && !reviewing, () => toggleFilter(f.id)))))),
       h('a', { class: 'side-item side-foot', href: '#/settings' }, icon('sliders'), h('span', { class: 'side-label', text: 'Settings' })));
+    root.querySelector('.side-scroll').scrollTop = keep;
   };
   subscribe(draw);
   onUi(draw);

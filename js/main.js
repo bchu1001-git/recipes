@@ -55,6 +55,12 @@ function announceArrivals() {
   onStatus(() => {
     if (status.state !== 'idle' || !status.toReview || status.at === told) return;
     told = status.at;
+    // Said once: the Shortcut that saved this has an older script, which misses what the new one reads.
+    if (status.scriptNote) {
+      toast('Saved, but your Save to Recipes Shortcut has an older script. Update it in Settings, Save from Safari.',
+        { label: 'Show me', run: () => { location.hash = '#/save'; } });
+      return;
+    }
     toast(status.toReview === 1 ? 'A new recipe is waiting for review' : status.toReview + ' new recipes are waiting for review',
       { label: 'Review', run: openReview });
   });

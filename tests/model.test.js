@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseIngredient, amountLabel, itemLabel, findTimers, parseDuration, formatMinutes, makeRecipe,
   matchesQuery, matchesFilters, starterFolders, newFolderId, initials, sortRecipes, splitLines, slug,
-  webLink, keptRecipes, waitingRecipes, reviewNotes,
+  webLink, keptRecipes, waitingRecipes, reviewNotes, isHeading, headingLabel, parseStep, partsOf, HEADING_MAX,
 } from '../js/model.js';
 
 const ing = (line) => {
@@ -188,4 +188,71 @@ test('review: says in plain words what is missing from a recipe that was read fr
   assert.equal(empty.length, 2);
   assert.match(empty[0], /No recipe was found on the page/);
   assert.equal(empty[1], 'No title was found.');
+});
+
+test('headings: a short line that ends with a colon is a heading', () => {
+  for (const yes of ['For the salsa:', 'Garnish:', '  For the chicken :  ', 'Step 2:', 'x'.repeat(HEADING_MAX - 1) + ':']) assert.equal(isHeading(yes), true, yes);
+  for (const no of ['For the salsa', 'Salt and pepper, to taste', 'Note: keep it cold', ':', ' : ', '', null, undefined, 'x'.repeat(HEADING_MAX) + ':']) assert.equal(isHeading(no), false, String(no));
+  assert.equal(headingLabel('For the salsa:'), 'For the salsa');
+  assert.equal(headingLabel('  For the  chicken : '), 'For the chicken');
+});
+
+test('headings: a heading among the ingredients keeps its text and is marked, with nothing read into it', () => {
+  assert.deepEqual(parseIngredient('For the salsa:'), { text: 'For the salsa:', qty: '', unit: '', item: 'For the salsa:', note: '', heading: true });
+  assert.deepEqual(parseIngredient('- 2 cups, packed:'), { text: '2 cups, packed:', qty: '', unit: '', item: '2 cups, packed:', note: '', heading: true });
+  assert.equal('heading' in parseIngredient('2 cups flour'), false);
+});
+
+test('headings: a heading among the steps has no timers', () => {
+  assert.deepEqual(parseStep('After 10 minutes:'), { text: 'After 10 minutes:', timers: [], heading: true });
+  assert.deepEqual(parseStep(' Simmer for 10 minutes. '), { text: 'Simmer for 10 minutes.', timers: [10] });
+});
+
+test('headings: a recipe marks its headings from the text, whoever wrote the entry', () => {
+  const recipe = makeRecipe({
+    title: 'Tacos',
+    ingredients: ['For the chicken:', '1 lb chicken thighs', 'For the salsa:', '3 tomatoes'],
+    steps: ['Grill the chicken for 10 minutes.', 'For the salsa:', 'Blend everything.'],
+  });
+  assert.deepEqual(recipe.ingredients.map((i) => !!i.heading), [true, false, true, false]);
+  assert.deepEqual(recipe.steps.map((s) => !!s.heading), [false, true, false]);
+  assert.deepEqual(recipe.ingredients.map((i) => i.text), ['For the chicken:', '1 lb chicken thighs', 'For the salsa:', '3 tomatoes']);
+
+  // An entry saved by a version that knew nothing of headings gains the mark; one whose text is no
+  // longer a heading loses it; everything else in the entries is left as it was.
+  const old = makeRecipe({
+    ...recipe,
+    ingredients: [{ text: 'For the chicken:', qty: '', unit: '', item: 'For the chicken:', note: '' }, { text: '2 cups flour', qty: '2', unit: 'cups', item: 'flour', note: '', heading: true, extra: 1 }],
+    steps: [{ text: 'In 5 minutes:', timers: [5] }, { text: 'Stir.', timers: [], heading: true }],
+  });
+  assert.deepEqual(old.ingredients, [
+    { text: 'For the chicken:', qty: '', unit: '', item: 'For the chicken:', note: '', heading: true },
+    { text: '2 cups flour', qty: '2', unit: 'cups', item: 'flour', note: '', extra: 1 },
+  ]);
+  assert.deepEqual(old.steps, [{ text: 'In 5 minutes:', timers: [], heading: true }, { text: 'Stir.', timers: [] }]);
+  // An entry that already agrees is the very same object, so saving changes nothing in it.
+  assert.equal(makeRecipe(recipe).ingredients[0], recipe.ingredients[0]);
+});
+
+test('headings: a list is split at its headings, and the numbers carry on across them', () => {
+  const list = ['Salt', 'For the chicken:', '1 lb thighs', 'Oil', 'For the salsa:', 'Garnish:', 'Cilantro', 'For the chicken:', 'More thighs'].map((text) => ({ text }));
+  assert.deepEqual(partsOf(list), [
+    { heading: -1, label: '', key: '', lines: [{ index: 0, number: 1 }] },
+    { heading: 1, label: 'For the chicken', key: 'For the chicken', lines: [{ index: 2, number: 2 }, { index: 3, number: 3 }] },
+    { heading: 4, label: 'For the salsa', key: 'For the salsa', lines: [] },
+    { heading: 5, label: 'Garnish', key: 'Garnish', lines: [{ index: 6, number: 4 }] },
+    { heading: 7, label: 'For the chicken', key: 'For the chicken#2', lines: [{ index: 8, number: 5 }] },
+  ]);
+  // No headings: one part, numbered straight through. Nothing at all: no parts.
+  assert.deepEqual(partsOf([{ text: 'Mix.' }, { text: 'Bake.' }]), [{ heading: -1, label: '', key: '', lines: [{ index: 0, number: 1 }, { index: 1, number: 2 }] }]);
+  assert.deepEqual(partsOf([]), []);
+  assert.deepEqual(partsOf(undefined), []);
+});
+
+test('headings: a heading does not count as an ingredient or a step when a recipe is checked', () => {
+  const onlyHeadings = makeRecipe({ title: 'Tacos', ingredients: ['For the chicken:'], steps: ['To serve:'] });
+  assert.match(reviewNotes(onlyHeadings)[0], /No recipe was found on the page/);
+  const noSteps = makeRecipe({ title: 'Tacos', ingredients: ['For the chicken:', '1 lb thighs'], steps: ['To serve:'] });
+  assert.deepEqual(reviewNotes(noSteps), ['No steps were found.']);
+  assert.equal(matchesQuery(noSteps, 'serve'), true);   // a heading can still be searched for
 });

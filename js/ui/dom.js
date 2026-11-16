@@ -57,6 +57,19 @@ export function icon(name, cls) {
   return svg;
 }
 
+/**
+ * Shows a chip as picked or not, by changing the chip that is already on the screen. Drawing the whole
+ * row of chips again instead throws away the scroll position on an iPhone. `tick` adds a check mark.
+ */
+export function paintChip(chip, on, tick) {
+  chip.classList.toggle('is-on', on);
+  chip.setAttribute('aria-pressed', String(on));
+  const mark = chip.querySelector('.chip-tick');
+  if (tick && on && !mark) chip.prepend(icon('check', 'chip-tick'));
+  if (mark && !on) mark.remove();
+  return chip;
+}
+
 const layers = () => document.getElementById('layers');
 
 /**

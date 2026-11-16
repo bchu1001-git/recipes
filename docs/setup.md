@@ -176,9 +176,12 @@ a separate repository in their own account.
 ## Part 4: saving from Safari, and later steps
 
 **The "Save to Recipes" Shortcut.** Its steps are inside the app, with your library's own address
-filled in: open Recipes, then **Settings**, **Save from Safari**, **Set up Save to Recipes**. The
-Shortcut is made by hand on each iPhone and gets a key of its own. It is a first try that still has to
-be proven on a phone.
+filled in: open Recipes, then **Settings**, **Save from Safari**, **Set up or update Save to
+Recipes**. The Shortcut is made by hand on each iPhone and gets a key of its own. The steps were run
+on an iPhone with iOS 27 in November 2026; names can differ a little on other versions.
+
+When the app learns to read more from a page, the script inside the Shortcut has to be replaced. The
+app says so after a sync, and the same screen has the four steps under **Update the script**.
 
 These will be written out in full when the parts they belong to are built:
 

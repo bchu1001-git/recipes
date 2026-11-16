@@ -3,7 +3,7 @@
 
 import { gitBlobSha } from './hash.js';
 import { mergeLibraries, serializeRecipe, serializeFolders, serializeDeleted, recipePath, recipeIdOf } from './merge.js';
-import { recipeFromCapture } from '../import/page.js';
+import { recipeFromCapture, SCRIPT_VERSION } from '../import/page.js';
 
 const FOLDERS = 'folders.json';
 const DELETED = 'deleted.json';
@@ -57,12 +57,13 @@ function captureTime(at, now) {
 /**
  * Looks through inbox/ for saved pages and turns each into a recipe waiting for review.
  *
- * Returns { recipes, done, left }: the new recipes, the inbox files that are finished with, and the
- * files that were looked at and left alone (path -> hash), so they are not downloaded again next time.
+ * Returns { recipes, done, left, outdated }: the new recipes, the inbox files that are finished with,
+ * the files that were looked at and left alone (path -> hash), so they are not downloaded again next
+ * time, and how many of the new recipes came from a Shortcut whose page script is an older version.
  * Nothing in the inbox can stop a sync, apart from losing the connection or the key.
  */
 async function readInbox({ client, files, sizes, known, taken, now }) {
-  const out = { recipes: [], done: [], left: {} };
+  const out = { recipes: [], done: [], left: {}, outdated: 0 };
   for (const [path, sha] of files) {
     if (!INBOX.test(path)) continue;
     if (known[path] === sha || (sizes.get(path) || 0) > INBOX_MAX) { out.left[path] = sha; continue; }
@@ -87,6 +88,7 @@ async function readInbox({ client, files, sizes, known, taken, now }) {
         continue;
       }
       out.recipes.push({ ...recipe, id });
+      if (!(Number(data.s) >= SCRIPT_VERSION)) out.outdated++;
     }
     out.done.push(path);
   }
@@ -97,8 +99,9 @@ async function readInbox({ client, files, sizes, known, taken, now }) {
  * local:  { recipes: [recipe], folders, deleted }   as this device has them now
  * base:   { head, files: { path: hash }, inbox }    as of the last successful sync, or {}
  *
- * Returns the merged library, the new base, how many recipes changed on each side, and `added`: how
- * many recipes were made from pages waiting in the inbox.
+ * Returns the merged library, the new base, how many recipes changed on each side, `added`: how many
+ * recipes were made from pages waiting in the inbox, and `outdated`: how many of those pages were saved
+ * by a Shortcut whose page script is older than this app expects.
  * Changes made on GitHub by someone else while this runs are picked up by trying again.
  */
 export async function syncLibrary({ client, local, base = {}, device = '', branch = 'main', now = new Date().toISOString() }) {
@@ -202,6 +205,7 @@ export async function syncLibrary({ client, local, base = {}, device = '', branc
       sent: sentChanged + sentRemoved,
       received,
       added,
+      outdated: inbox.outdated,
     };
   }
   throw new Error('The library kept changing while syncing. Try again in a moment.');

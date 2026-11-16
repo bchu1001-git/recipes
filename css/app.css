@@ -180,9 +180,20 @@ input, textarea { font: inherit; color: inherit; }
 .ing-amount { font-weight: 700; }
 .is-done .ing-row { color: var(--ink3); }
 .is-done .ing-tick { background: var(--acc); border-color: var(--acc); color: var(--onacc); }
-.steps { counter-reset: step; }
-.steps li { counter-increment: step; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 17px; line-height: 1.45; }
-.steps li::before { content: counter(step); font-weight: 700; color: var(--acc); }
+.steps li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 17px; line-height: 1.45; }
+.steps li::before { content: attr(data-n); font-weight: 700; color: var(--acc); }
+/* A heading among the ingredients or the steps ("For the salsa"): no tick and no number. Tapping it folds away the lines under it. */
+.part-head { padding: 22px 0 8px; border-bottom: 1px solid var(--line); }
+.part-head:first-child { padding-top: 10px; }
+.part-head h3 { font-size: 15px; font-weight: 700; color: var(--ink); }
+.part-head.can-fold { padding: 0; }
+.part-fold { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; width: 100%; padding: 22px 0 8px; text-align: left; }
+.part-head.can-fold:first-child .part-fold { padding-top: 10px; }
+.part-fold-count { color: var(--ink3); font-weight: 600; }
+.part-fold-arrow { flex: none; width: 18px; height: 18px; color: var(--ink3); }
+.is-folded .part-fold-arrow { transform: rotate(-90deg); }
+.steps li.part-head { display: block; }
+.steps li.part-head::before { content: none; }
 .notes { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
 .note { background: var(--bg2); border-radius: 12px; padding: 12px 14px; white-space: pre-wrap; }
 .quiet { color: var(--ink3); padding: 14px 0; }
@@ -252,6 +263,8 @@ textarea.input { resize: vertical; line-height: 1.4; min-height: 5rem; }
 .howto-list li { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
 .howto-note { background: var(--soft); color: var(--onsoft); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
 .howto-ask { display: flex; flex-direction: column; gap: 6px; padding-left: 1.2em; list-style: disc; }
+.howto-ask.howto-count { list-style: decimal; }
+.set-note b { color: var(--ink); font-weight: 600; }
 .howto-code { align-self: stretch; }
 .howto-code summary { color: var(--acc); font-size: 15px; cursor: pointer; padding: 4px 0; }
 .howto-code pre { margin: 6px 0 0; max-height: 16rem; overflow: auto; background: var(--bg2); border-radius: 11px; padding: 10px 12px; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }

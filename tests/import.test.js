@@ -22,7 +22,7 @@ const chicken = (more = {}) => ({
   '@context': 'https://schema.org',
   '@type': 'Recipe',
   name: 'Lemon herb chicken',
-  recipeIngredient: ['4 chicken thighs', '1 lemon, juiced', '2 tbsp olive oil'],
+  recipeIngredient: ['4 chicken thighs', '1 lemon, juiced', '1 tbsp soy sauce'],
   recipeInstructions: ['Heat the oven to 425 degrees.', 'Roast for 35 minutes.'],
   ...more,
 });
@@ -152,15 +152,113 @@ test('page steps: HowToStep objects', () => {
   ] }), ['Mix the batter.', 'Bake for 20 minutes.']);
 });
 
-test('page steps: a section puts its name in front of its first step', () => {
+test('page steps: a section\'s name becomes a heading line before its steps', () => {
   const section = (name, ...texts) => ({ '@type': 'HowToSection', name, itemListElement: texts.map((text) => ({ '@type': 'HowToStep', text })) });
   assert.deepEqual(stepsOf([
     section('For the chicken', 'Season the thighs.', 'Roast for 35 minutes.'),
     section('For the sauce:', 'Whisk the lemon juice with the oil.'),
-  ]), ['For the chicken: Season the thighs.', 'Roast for 35 minutes.', 'For the sauce: Whisk the lemon juice with the oil.']);
+  ]), ['For the chicken:', 'Season the thighs.', 'Roast for 35 minutes.', 'For the sauce:', 'Whisk the lemon juice with the oil.']);
+  // The app reads those lines as headings, and a heading has no timer in it.
+  const { recipe } = read([chicken({ recipeInstructions: [section('After 10 minutes', 'Roast for 35 minutes.'), section('To serve', 'Slice.')] })]);
+  assert.deepEqual(recipe.steps.map((s) => !!s.heading), [true, false, true, false]);
+  assert.deepEqual(recipe.steps.map((s) => s.timers), [[], [35], [], []]);
   // A lone section, or one only called Instructions, adds nothing worth reading.
   assert.deepEqual(stepsOf([section('Lemon herb chicken', 'Season the thighs.', 'Roast.')]), ['Season the thighs.', 'Roast.']);
-  assert.deepEqual(stepsOf([section('Instructions', 'Season the thighs.'), section('To serve', 'Slice.')]), ['Season the thighs.', 'To serve: Slice.']);
+  assert.deepEqual(stepsOf([section('Instructions', 'Season the thighs.'), section('To serve', 'Slice.')]), ['Season the thighs.', 'To serve:', 'Slice.']);
+  // A name too long to be a heading goes in front of the first step, as a sentence would.
+  const long = 'For the slow roasted chicken thighs with lemon, garlic and all of the herbs';
+  assert.deepEqual(stepsOf([section(long, 'Season.'), section('To serve', 'Slice.')]), [long + ': Season.', 'To serve:', 'Slice.']);
+});
+
+// ---------- the groups the page's layout shows ----------
+
+const BOWLS = ['2 chicken breasts', '1 tbsp soy sauce', 'Juice of ½ lemon', '2 cups cooked rice', '½ cucumber', '2 carrots', 'Juice of ½ lemon', 'Sesame seeds'];
+const grouped = (groups, recipeIngredient = BOWLS) => read([chicken({ recipeIngredient })], { groups }).recipe.ingredients;
+const textsOf = (ingredients) => ingredients.map((i) => i.text);
+const withoutHeadings = (ingredients) => ingredients.filter((i) => !i.heading).map((i) => i.text);
+const BOWL_GROUPS = [
+  { name: 'For the chicken', items: ['2 chicken breasts', '1 tbsp soy sauce', 'Juice of ½ lemon'] },
+  { name: 'For the bowls', items: ['2 cups cooked rice'] },
+  { name: 'For the slaw:', items: ['½ cucumber', '2 carrots', 'Juice of ½ lemon'] },
+  { name: 'To finish', items: ['Sesame seeds'] },
+];
+
+test('page groups: the groups a page shows become heading lines among the ingredients', () => {
+  const out = grouped(BOWL_GROUPS);
+  assert.deepEqual(textsOf(out), [
+    'For the chicken:', '2 chicken breasts', '1 tbsp soy sauce', 'Juice of ½ lemon',
+    'For the bowls:', '2 cups cooked rice',
+    'For the slaw:', '½ cucumber', '2 carrots', 'Juice of ½ lemon',
+    'To finish:', 'Sesame seeds',
+  ]);
+  assert.deepEqual(out.filter((i) => i.heading).map((i) => i.text), ['For the chicken:', 'For the bowls:', 'For the slaw:', 'To finish:']);
+  // The same line in two groups (the lemon juice) lands once in each, and nothing else changes.
+  assert.deepEqual(withoutHeadings(out), BOWLS);
+  assert.equal(out[1].qty, '2');
+});
+
+test('page groups: a line is recognised whatever its spacing, capitals, punctuation or entities', () => {
+  const out = grouped([
+    { name: ' For the chicken : ', items: ['  2 Chicken Breasts ', '1 tbsp. soy sauce', '<b>Juice</b> of &frac12; lemon'] },
+    { name: 'The rest', items: ['2 cups cooked  rice', '&#189; cucumber', '2 Carrots', 'juice of ½ lemon', 'Sesame  seeds'] },
+  ]);
+  assert.deepEqual(textsOf(out), ['For the chicken:', ...BOWLS.slice(0, 3), 'The rest:', ...BOWLS.slice(3)]);
+});
+
+test('page groups: ingredients before the first group come first, and one found in no group stays where it is', () => {
+  const lines = ['1 tbsp soy sauce', '2 chicken breasts', '2 cups cooked rice', '½ cucumber', '2 carrots', '1 jalapeño', 'Sesame seeds', 'Lime wedges',
+    'Salt', 'Pepper', 'Cumin', 'Garlic', 'Oregano', 'Paprika', 'Stock'];
+  const out = grouped([
+    { name: 'For the chicken', items: ['2 chicken breasts', 'Salt', 'Pepper'] },
+    { name: 'For the slaw', items: ['½ cucumber', '1 jalapeño', 'Sesame seeds', 'Lime wedges'] },
+    { name: 'Spices', items: ['Cumin', 'Garlic', 'Oregano', 'Paprika', 'Stock'] },
+  ], lines);
+  // Salt and pepper sit after the slaw in the data, so the groups would have to go backwards: left alone.
+  assert.deepEqual(textsOf(out), lines);
+
+  // Nothing claims the oil, which is ahead of the first group, or the tomatoes, in the middle of the slaw.
+
+  const tidy = ['1 tbsp soy sauce', '2 chicken breasts', 'Salt', '2 cups cooked rice', '½ cucumber', '1 jalapeño', '2 carrots', 'Sesame seeds', 'Lime wedges', 'Cumin'];
+  const again = grouped([
+    { name: 'For the chicken', items: ['2 chicken breasts', 'Salt', '2 cups cooked rice'] },
+    { name: 'For the slaw', items: ['½ cucumber', '1 jalapeño', 'Sesame seeds', 'Lime wedges'] },
+    { name: 'Spices', items: ['Cumin', 'Something that is not in the data'] },
+  ], tidy);
+  assert.deepEqual(textsOf(again), [
+    '1 tbsp soy sauce',
+    'For the chicken:', '2 chicken breasts', 'Salt', '2 cups cooked rice',
+    'For the slaw:', '½ cucumber', '1 jalapeño', '2 carrots', 'Sesame seeds', 'Lime wedges',
+    'Spices:', 'Cumin',
+  ]);
+  assert.deepEqual(withoutHeadings(again), tidy);
+});
+
+test('page groups: they are used only when they account for at least four in five of the ingredients', () => {
+  const some = [{ name: 'For the chicken', items: BOWLS.slice(0, 3) }, { name: 'For the slaw', items: BOWLS.slice(4, 7) }];   // 6 of 8
+  assert.deepEqual(textsOf(grouped(some)), BOWLS);
+  const most = [{ name: 'For the chicken', items: BOWLS.slice(0, 4) }, { name: 'For the slaw', items: BOWLS.slice(4, 7) }];   // 7 of 8
+  assert.deepEqual(textsOf(grouped(most)), ['For the chicken:', ...BOWLS.slice(0, 4), 'For the slaw:', ...BOWLS.slice(4)]);
+});
+
+test('page groups: no ingredient is ever lost, repeated or moved because of them', () => {
+  const odd = [
+    [{ name: 'To finish', items: ['Sesame seeds'] }, ...BOWL_GROUPS.slice(0, 3)],                      // the page's order differs from the data's
+    [{ name: 'Everything', items: [...BOWLS, ...BOWLS, '2 cups cooked rice'] }],                             // lines listed more often than they exist
+    [{ name: 'x'.repeat(80), items: BOWLS.slice(0, 4) }, { name: 'For the slaw', items: BOWLS.slice(4) }],   // a name too long to be a heading
+    [{ name: '', items: BOWLS }],
+    [{ name: 'Only a name' }, { items: 'not a list' }, null, 7, 'text', [], { name: {}, items: [null, 3, {}, []] }],
+    'not a list', 7, null, {}, [[]],
+  ];
+  for (const groups of odd) {
+    const out = grouped(groups);
+    assert.deepEqual(withoutHeadings(out), BOWLS, JSON.stringify(groups).slice(0, 60));
+  }
+  assert.deepEqual(textsOf(grouped(odd[0])), BOWLS);                                                    // out of order: left alone
+  assert.deepEqual(textsOf(grouped(odd[1])), ['Everything:', ...BOWLS]);
+  assert.deepEqual(textsOf(grouped(odd[2])), [...BOWLS.slice(0, 4), 'For the slaw:', ...BOWLS.slice(4)]);
+  assert.deepEqual(textsOf(grouped(odd[3])), BOWLS);
+  // A page with no recipe data ignores them too.
+  assert.equal(recipeFromCapture({ v: 1, url: PAGE, title: 'About us', ld: [], groups: BOWL_GROUPS }, NOW).found, false);
 });
 
 test('page: tags and entities are taken out of every text field', () => {
@@ -327,7 +425,7 @@ test('page: common slips in a page\'s JSON are read anyway', () => {
   const text = JSON.stringify(chicken());
   const slips = {
     'a line break inside a string': text.replace('Lemon herb chicken', 'Lemon herb\nchicken'),
-    'a trailing comma': text.replace('"2 tbsp olive oil"]', '"2 tbsp olive oil",]'),
+    'a trailing comma': text.replace('"1 tbsp soy sauce"]', '"1 tbsp soy sauce",]'),
     'an HTML comment around it': '<!--\n' + text + '\n-->',
     'a CDATA wrapper': '//<![CDATA[\n' + text + '\n//]]>',
     'a semicolon after it': text + ';',

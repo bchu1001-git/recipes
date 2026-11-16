@@ -17,6 +17,10 @@ Built and working:
 - A heart for the Go-to version of a dish, and a 1 to 5 rating.
 - The recipe page with its Ingredients / Steps / Notes switch and tick-off circles. On a wide window
   the three parts sit side by side.
+- Headings inside a recipe. A line that ends with a colon, such as `For the salsa:`, is a heading,
+  among the ingredients and among the steps. On the recipe page a tap on a heading folds away the
+  lines under it and another tap brings them back; the steps keep their numbers either way. What is
+  folded is remembered on that device only and is never synced.
 - Appearance: match the device, or force Light or Dark.
 - A backup file you can save and open again.
 - Syncing between devices through a private GitHub repository (a "library"): connect in Settings with
@@ -25,12 +29,12 @@ Built and working:
 - **To review:** a recipe that arrives from outside waits apart from the others until you keep it or
   discard it. Its screen shows where it came from, a link to the original, what looks missing, and
   the same fields as the editor.
-- Saving a recipe page from Safari, on the app's side: a page that lands in the library's `inbox/`
-  becomes a recipe to review at the next sync, read from the recipe data the page carries. Settings,
-  Save from Safari has the steps for making the "Save to Recipes" Shortcut that puts it there.
-
-Built but not proven: the "Save to Recipes" Shortcut itself. Its steps are a first try that nobody has
-run on a phone yet.
+- Saving a recipe page from Safari. The "Save to Recipes" Shortcut puts the page in the library's
+  `inbox/`, and the next sync turns it into a recipe to review, read from the recipe data the page
+  carries. The groups a page shows its ingredients in ("For the chicken", "For the salsa") arrive
+  as headings. The Shortcut is made by hand from the steps in Settings, Save from Safari; they were
+  run on an iPhone with iOS 27 in November 2026. The same screen shows how to put a newer script
+  into the Shortcut when the app says the one it has is out of date.
 
 Not built yet, in this order: pasting a link inside the app and importing a bookmarks file, reading
 screenshots and photos, the kitchen view with timers, sharing with other people. See [docs/decisions.md](docs/decisions.md) for what was decided and
@@ -96,12 +100,12 @@ on the other. If both changed the same lines it stops and says which files, with
 | --- | --- |
 | `index.html` | The page that loads everything |
 | `css/app.css` | All styling. Light and dark differ only in the color tokens at the top |
-| `js/model.js` | Data rules with no screen or storage in them: recipes, ingredient lines, timers, search, folders |
-| `js/store.js` | The library on this device, kept in the browser's IndexedDB |
+| `js/model.js` | Data rules with no screen or storage in them: recipes, ingredient lines, headings, timers, search, folders |
+| `js/store.js` | The library on this device, kept in the browser's IndexedDB, and which groups are folded away on each recipe's page here |
 | `js/sync/` | Syncing: `github.js` (the few GitHub calls), `merge.js` (how two copies become one), `sync.js` (one round, including pages waiting in the inbox), `auto.js` (when to sync) |
 | `js/import/` | Reading recipes that come from outside. `page.js` turns the recipe data a web page carries into a recipe waiting for review; syncing uses it for pages in the inbox |
 | `shortcuts/` | `save-page.js`, the script the "Save to Recipes" Shortcut runs on the page open in Safari |
-| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `save.js` (the steps for making the Shortcut), `settings.js`, and helpers in `dom.js` |
+| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `save.js` (the steps for making the Shortcut and for updating its script), `settings.js`, and helpers in `dom.js` |
 | `js/sample.js` | Three made-up example recipes |
 | `sw.template.js` | The worker that keeps a copy of the app for offline use. Edit this one |
 | `sw.js`, `js/version.js` | Generated from the template by `scripts/publish.sh` on every publish. Never edit by hand |
