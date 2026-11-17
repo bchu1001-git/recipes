@@ -6,7 +6,7 @@ import { status, onStatus, syncNow, connect, disconnect, explain, ago, scriptIsO
 import { newFolderId } from '../model.js';
 import { EXAMPLES } from '../sample.js';
 import { BUILD } from '../version.js';
-import { timerMode, setTimerMode } from './timers.js';
+import { timerMode, setTimerMode, playTimerSound } from './timers.js';
 
 const APPEARANCE_KEY = 'recipes.appearance';
 const MODES = [['system', 'Match the phone'], ['light', 'Light'], ['dark', 'Dark']];
@@ -254,7 +254,16 @@ export function renderSettings(root) {
           h('p', { class: 'set-note', text: timerMode() === 'clock'
             ? 'A timer starts in the iPhone’s Clock app and rings even when the phone is locked. It needs the Recipe Timer Shortcut.'
             : 'A countdown shows in the kitchen view. It rings only while Recipes is open on screen.' }),
-          timerMode() === 'clock' ? h('a', { class: 'btn btn-quiet', href: '#/timers' }, 'Set up or try the Recipe Timer Shortcut') : null),
+          timerMode() === 'clock'
+            ? h('a', { class: 'btn btn-quiet', href: '#/timers' }, 'Set up or try the Recipe Timer Shortcut')
+            : [
+              // One tap to hear what a finished timer sounds like, without waiting for one.
+              h('button', { class: 'btn btn-quiet', type: 'button', onclick: async () => {
+                const played = await playTimerSound();
+                if (!played) toast('This browser would not play the sound.');
+              } }, 'Play the timer sound'),
+              h('p', { class: 'set-note', text: 'This is the sound a finished timer makes. It is set to play with the phone on silent too, and the volume buttons set how loud it is.' }),
+            ]),
 
         h('p', { class: 'set-version', text: 'Recipes · version ' + BUILD + (state.saved ? '' : ' · this browser is not saving data') }))));
     root.querySelector('.pane-scroll').scrollTop = keep;

@@ -62,7 +62,8 @@ Built and working:
 - Timers. Each time a step mentions is a button in the kitchen view, and a range such as "5 to 7
   minutes" offers both ends. Settings, Timers chooses where they run on a device. In this app: a
   countdown in the kitchen view, and at zero an alert wherever in the app you are, with a sound, but
-  only while the app is open on screen. In the Clock app: the tap starts a timer in the iPhone's own
+  only while the app is open on screen. The sound is set to play with the phone on silent too, and
+  Settings, Timers has a button that plays it once, to check. In the Clock app: the tap starts a timer in the iPhone's own
   Clock through the "Recipe Timer" Shortcut, so it rings with the phone locked; the phone is left in
   the Shortcuts app, you come back yourself, and the app keeps its own count of the time left.
   Several timers can run at once, and they survive a reload.
@@ -72,11 +73,12 @@ the workflow file added, a note shared from an iPhone (iOS 27) with the Send to 
 reached the library, was read there, and came back under To review with its pictures, groups and
 title. Sending pictures from the + button uses the same reader but has not been tried on a phone.
 
-The kitchen view and its timers have been run in a browser on a computer only. Still to be tried on
-an iPhone: whether the screen stays awake, whether the sound of a timer that runs in the app is heard
-(it is made in code, and may follow the phone's silent switch), and the app opening back into the
-kitchen view after the phone has reloaded it. Handing a timer to the Clock app was proven on its own
-in November 2026.
+The kitchen view was tried on an iPhone with iOS 27 in November 2026: the screen stays awake, a timer
+in the app counts down and shows its alert, and a timer handed to the Clock app starts there and
+leaves the kitchen view on the same step. One thing failed: with the phone on silent the timer in
+the app made no sound. The sound has since been changed so that it should be heard on silent, and
+that change has only been run in a browser on a computer, where there is no silent switch to try it
+against. It still has to be heard on the phone.
 
 Not built yet, in this order: pasting a link inside the app and importing a bookmarks file, and
 sharing with other people. See [docs/decisions.md](docs/decisions.md) for what was decided and
