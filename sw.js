@@ -3,7 +3,7 @@
 // scripts/publish.sh copies this file to sw.js with the two placeholders filled in. A new BUILD on
 // every publish is what makes each device fetch the new files the next time it is online.
 
-const BUILD = '20261116-223944';
+const BUILD = '20261117-003904';
 const FILES = ['./', 'css/app.css', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon.svg', 'index.html', 'js/import/page.js', 'js/jobs.js', 'js/kitchen.js', 'js/main.js', 'js/model.js', 'js/sample.js', 'js/store.js', 'js/sync/auto.js', 'js/sync/github.js', 'js/sync/hash.js', 'js/sync/merge.js', 'js/sync/originals.js', 'js/sync/sync.js', 'js/theme.js', 'js/ui/clock.js', 'js/ui/dom.js', 'js/ui/editor.js', 'js/ui/home.js', 'js/ui/kitchen.js', 'js/ui/photos.js', 'js/ui/pictures.js', 'js/ui/read.js', 'js/ui/recipe.js', 'js/ui/review.js', 'js/ui/save.js', 'js/ui/send.js', 'js/ui/settings.js', 'js/ui/state.js', 'js/ui/timers.js', 'js/version.js', 'manifest.webmanifest', 'proofs/timer.html', 'shortcuts/save-page.js'];
 const CACHE = 'recipes-' + BUILD;
 
