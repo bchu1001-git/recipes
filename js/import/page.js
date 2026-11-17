@@ -23,7 +23,7 @@
 // are removed and entities decoded with string code only. Nothing here is ever parsed as HTML, and the
 // only link kept is one that starts with http or https.
 
-import { makeRecipe, parseDuration, HEADING_MAX } from '../model.js';
+import { makeRecipe, parseDuration, isHeading, HEADING_MAX } from '../model.js';
 
 /**
  * The version of shortcuts/save-page.js that goes with this reader. Raise it, and the `s` the script
@@ -471,7 +471,12 @@ function read(capture, now) {
   const site = siteName(capture, best && best.node, nodes);
   const fallbackUrl = best ? [best.node.url, best.node.mainEntityOfPage, best.node.mainEntityOfPage && best.node.mainEntityOfPage['@id'], best.node['@id']] : [];
   const url = [capture.url, ...fallbackUrl].map(webAddress).find(Boolean) || '';
-  const source = { kind: 'web', name: site, url };
+  // A recipe sent from this app as a link (js/share.js) says where it first came from. That is its
+  // source, not the address of the page it was read on, which is only the link it travelled in.
+  const sent = best && best.node.sentFrom && typeof best.node.sentFrom === 'object' && !Array.isArray(best.node.sentFrom) ? best.node.sentFrom : null;
+  const source = sent
+    ? { kind: 'shared', name: lineOf(sent.name).slice(0, MAX_SHORT), url: webAddress(sent.url) }
+    : { kind: 'web', name: site, url };
   const problems = [];
 
   if (!best) {
@@ -491,9 +496,11 @@ function read(capture, now) {
     source,
     minutes: minutesOf(best.node),
     serves: servesOf(best.node),
-    ingredients: withGroups(best.ingredients, capture.groups),
+    // Data that already has its own heading lines is left as it is: the layout's groups would only
+    // put the same headings in a second time.
+    ingredients: best.ingredients.some(isHeading) ? best.ingredients : withGroups(best.ingredients, capture.groups),
     steps: best.steps,
-    notes: { source: best.tips.join('\n') },
+    notes: { source: [best.tips.join('\n'), sent ? plainLines(sent.notes).join('\n') : ''].filter(Boolean).join('\n') },
     review: true,
   }, now);
   return { recipe, found: true, problems };
@@ -508,6 +515,10 @@ function read(capture, now) {
  *
  * Kept: title, ingredients, steps, total time, servings, the site's name and the link. Tips that a
  * page lists among its steps go to notes.source. The page's story, pictures and ratings are left out.
+ *
+ * A recipe sent from this app as a link (js/share.js) says in `sentFrom` where it first came from.
+ * That is kept as its source, with the notes that travelled, in place of the address of the page
+ * that showed it.
  */
 export function recipeFromCapture(capture, now) {
   const when = typeof now === 'string' && now ? now : new Date().toISOString();

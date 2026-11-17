@@ -64,9 +64,15 @@ Built and working:
   countdown in the kitchen view, and at zero an alert wherever in the app you are, with a sound, but
   only while the app is open on screen. The sound is set to play with the phone on silent too, and
   Settings, Timers has a button that plays it once, to check. In the Clock app: the tap starts a timer in the iPhone's own
-  Clock through the "Recipe Timer" Shortcut, so it rings with the phone locked; the phone is left in
-  the Shortcuts app, you come back yourself, and the app keeps its own count of the time left.
+  Clock through the "Recipe Timer" Shortcut, so it rings with the phone locked. One more action at the
+  end of that Shortcut brings the app back to the front by itself; without it the phone is left in the
+  Shortcuts app and you come back yourself. Either way the app keeps its own count of the time left.
   Several timers can run at once, and they survive a reload.
+- Sending a recipe to someone as a link. "Send this recipe" on a recipe's menu makes a link with the
+  recipe itself inside it, in the part after `#`, which is never sent to a server. Whoever opens it
+  can read the recipe with no app and no sign-in, and keeps it with the Save to Recipes Shortcut, or
+  with one button where their copy of the app has a library connected. Your own notes go along only
+  if you leave that switch on. Pictures, folders, the heart and the rating do not travel.
 
 Reading pictures inside a library was proven in November 2026. With the key saved as a secret and
 the workflow file added, a note shared from an iPhone (iOS 27) with the Send to Recipes Shortcut
@@ -75,13 +81,18 @@ title. Sending pictures from the + button uses the same reader but has not been 
 
 The kitchen view was tried on an iPhone with iOS 27 in November 2026: the screen stays awake, a timer
 in the app counts down and shows its alert, and a timer handed to the Clock app starts there and
-leaves the kitchen view on the same step. One thing failed: with the phone on silent the timer in
-the app made no sound. The sound has since been changed so that it should be heard on silent, and
-that change has only been run in a browser on a computer, where there is no silent switch to try it
-against. It still has to be heard on the phone.
+leaves the kitchen view on the same step. At first the timer in the app made no sound with the phone
+on silent; after the sound was changed to play on silent it was heard on the same phone. An Open URLs
+action at the end of the Recipe Timer Shortcut, with `webapp://` in front of the app's address,
+brought the Home Screen app itself back to the front after the timer started.
 
-Not built yet, in this order: pasting a link inside the app and importing a bookmarks file, and
-sharing with other people. See [docs/decisions.md](docs/decisions.md) for what was decided and
+Sending a recipe as a link has been run in a browser on a computer only: making the link, opening it,
+the real page script reading the opened page, and the reader keeping it with its headings, notes and
+first source. Still to be tried between two phones: the link arriving whole through a messaging app,
+and Save to Recipes on the page it opens.
+
+Not built yet, in this order: pasting a link inside the app and importing a bookmarks file, and the
+guided steps for adding a second person to a library or starting a second library. See [docs/decisions.md](docs/decisions.md) for what was decided and
 [docs/architecture.md](docs/architecture.md) for how the pieces will fit.
 
 A device that is not connected to a library keeps its recipes only in its own browser. Use Settings,
@@ -159,19 +170,20 @@ on the other. If both changed the same lines it stops and says which files, with
 | `css/app.css` | All styling. Light and dark differ only in the color tokens at the top |
 | `js/model.js` | Data rules with no screen or storage in them: recipes, ingredient lines, headings, timers, search, folders |
 | `js/store.js` | The library on this device, kept in the browser's IndexedDB, with the pictures still waiting to be sent, which groups are folded away on each recipe's page here, and what the kitchen view remembers: the step each recipe was left at and the timers that are running |
-| `js/kitchen.js` | The kitchen view's rules with no screen in them: which steps show and in what order, what a timer has left, the link that starts one in the Clock app, and what is worth keeping of what a device remembers |
+| `js/kitchen.js` | The kitchen view's rules with no screen in them: which steps show and in what order, what a timer has left, the link that starts one in the Clock app, the address that brings the app back afterwards, and what is worth keeping of what a device remembers |
+| `js/share.js` | Sending a recipe as a link: what travels, how it is packed into the link and unpacked, and the recipe data the page that shows it carries |
 | `js/jobs.js` | The rules for a picture job, shared by the app and the importer: its file and folder names, what its file holds, how small a picture is made, the file a Shortcut shares whole with its pictures inside it, and the workflow file a library needs |
 | `js/sync/` | Syncing: `github.js` (the few GitHub calls), `merge.js` (how two copies become one), `sync.js` (one round, including pages waiting in the inbox and pictures on their way to being read), `auto.js` (when to sync), `originals.js` (fetching the pictures a recipe was read from, and keeping them on the device) |
 | `js/import/` | Reading recipes that come from outside. `page.js` turns the recipe data a web page carries into a recipe waiting for review; syncing uses it for pages in the inbox |
 | `shortcuts/` | `save-page.js`, the script the "Save to Recipes" Shortcut runs on the page open in Safari |
 | `importer/` | What a library runs when pictures arrive, in Node with no packages: `run.mjs` (the command), `jobs.mjs` (works through the waiting jobs), `unpack.mjs` (finds the pictures in a file that was shared whole), `reading.mjs` (from what was read to a recipe), `git.mjs` (the commit), and `readers/` (the AI reader, `gemini.mjs`, and a stand-in). It uses `js/model.js`, `js/jobs.js`, `js/import/page.js` and `js/sync/merge.js`, so those must stay free of anything only a browser has. The app never loads it |
-| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `photos.js` (choosing pictures to send), `send.js` (the steps for the Send to Recipes Shortcut), `pictures.js` (showing the pictures a recipe was read from), `save.js` (the steps for making the Shortcut and for updating its script), `read.js` (the steps for setting a library up to read pictures), `kitchen.js` (the kitchen view), `timers.js` (the running timers, the alert at zero and its sound), `clock.js` (the steps for the Recipe Timer Shortcut), `settings.js`, `state.js` (what is on screen now, and the ticked ingredients), and helpers in `dom.js` |
+| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `photos.js` (choosing pictures to send), `send.js` (the steps for the Send to Recipes Shortcut), `pictures.js` (showing the pictures a recipe was read from), `save.js` (the steps for making the Shortcut and for updating its script), `read.js` (the steps for setting a library up to read pictures), `kitchen.js` (the kitchen view), `timers.js` (the running timers, the alert at zero and its sound), `clock.js` (the steps for the Recipe Timer Shortcut), `sent.js` (making the link for a recipe, and the page that shows one that was sent), `settings.js`, `state.js` (what is on screen now, and the ticked ingredients), and helpers in `dom.js` |
 | `js/sample.js` | Three made-up example recipes |
 | `sw.template.js` | The worker that keeps a copy of the app for offline use. Edit this one |
 | `sw.js`, `js/version.js` | Generated from the template by `scripts/publish.sh` on every publish. Never edit by hand |
 | `manifest.webmanifest`, `icons/` | Name and icon for the Home Screen and Dock |
 | `proofs/` | The test page the Clock timer was first tried with on a real phone. The app's own screen for it is Settings, Timers |
-| `tests/` | Tests for the data rules, the kitchen view's rules, merging, syncing, the inbox, the web-page reader, the page script, picture jobs and the importer, plus `fake-github.js`, the stand-in they sync against |
+| `tests/` | Tests for the data rules, the kitchen view's rules, merging, syncing, the inbox, the web-page reader, the page script, picture jobs, the importer and sending a recipe as a link, plus `fake-github.js`, the stand-in they sync against |
 | `scripts/` | `serve.sh` to run it locally, `publish.sh` to publish, `dev-server.mjs` to try syncing and the importer locally, `try-reader.mjs` to try the AI reader on pictures |
 | `docs/` | Decisions, architecture, and the steps only the owner can take |
 

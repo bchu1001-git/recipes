@@ -7,7 +7,7 @@
 import { h, icon } from './dom.js';
 import { b, p, piece, step } from './save.js';
 import { timerMode, setTimerMode, onTimers } from './timers.js';
-import { timerLink } from '../kitchen.js';
+import { timerLink, returnAddress } from '../kitchen.js';
 
 export function renderClockSetup(root) {
   let shown = '';
@@ -16,6 +16,7 @@ export function renderClockSetup(root) {
     const keep = scroller ? scroller.scrollTop : 0;
     shown = timerMode();
     const clock = shown === 'clock';
+    const back = returnAddress(location.host, location.pathname);
 
     root.replaceChildren(h('div', { class: 'pane-scroll' },
       h('header', { class: 'bar bar-detail' },
@@ -26,7 +27,7 @@ export function renderClockSetup(root) {
         h('p', { class: 'set-note' },
           'In the kitchen view, each time a step mentions is a timer you can start with a tap. Handed to the iPhone’s ',
           b('Clock'), ' app, the timer rings even when the phone is locked or you are in another app. That needs a small Shortcut called ',
-          b('Recipe Timer'), ', which you make once on this iPhone. It takes two minutes.'),
+          b('Recipe Timer'), ', which you make once on this iPhone. It takes a few minutes.'),
 
         h('section', { class: 'set' },
           h('p', { class: 'set-status', role: 'status', text: clock
@@ -49,15 +50,20 @@ export function renderClockSetup(root) {
           step('Let Recipes say how long',
             p('In that action, tap the number. From the row just above the keyboard, choose ', b('Shortcut Input'), '. Leave the unit on ', b('minutes'), '. Then tap ', b('Done'), '.')),
 
+          step('Come back to Recipes by itself',
+            p('Without this, starting a timer leaves you in the Shortcuts app. Open the Shortcut again, search the actions for ', b('Open URLs'), ', and add it below Start Timer. Tap its ', b('URL'), ' and paste this, then tap ', b('Done'), ':'),
+            back ? piece(back, 'the address that comes back to Recipes') : p('This copy of the app could not work out its own address. Open this screen in the app you added to the Home Screen.'),
+            p('It is the address of this app with ', b('webapp://'), ' in front, which opens the app on the Home Screen itself, not a page in Safari.')),
+
           step('Try it',
-            p('Tap the button below. The phone goes to the Shortcuts app and a 1 minute timer starts in Clock. It rings even if you lock the phone.'),
+            p('Tap the button below. The phone goes to the Shortcuts app, a 1 minute timer starts in Clock, and Recipes comes back to the front. The timer rings even if you lock the phone.'),
             h('a', { class: 'btn btn-main', href: timerLink(1) }, icon('timer'), 'Start a 1 minute timer'),
-            p('Then come back to Recipes yourself: swipe along the bottom edge of the screen. The phone does not come back by itself.'))),
+            p('If the phone says the address is not valid, delete the Open URLs action. The timer still starts; you then come back to Recipes yourself, with a swipe along the bottom edge of the screen.'))),
 
         h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Good to know' }),
           h('ul', { class: 'howto-ask' },
-            h('li', { text: 'Starting a timer leaves you in the Shortcuts app each time. One swipe along the bottom edge brings Recipes back, at the step you were on.' }),
+            h('li', { text: 'With the Open URLs action in place, Recipes comes back by itself at the step you were on. Without it, you are left in the Shortcuts app, and one swipe along the bottom edge brings Recipes back.' }),
             h('li', { text: 'Recipes keeps its own count of the time left, worked out from the moment you tapped. It cannot see the timer in Clock, so stopping or changing it there does not show here. Clear it here with the x beside it.' }),
             h('li', { text: 'A step that says “5 to 7 minutes” offers both, so you can look early and then go on.' }),
             h('li', { text: 'Each device chooses for itself. Another phone using the same library is not affected.' }))))));

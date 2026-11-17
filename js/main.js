@@ -1,6 +1,6 @@
 // Starts the app: loads the library saved on this device, draws the list, and shows
 // whatever the address asks for (#/r/<id>, #/cook/<id>, #/new, #/photos, #/edit/<id>, #/settings, #/save,
-// #/read, #/send, #/timers).
+// #/read, #/send, #/timers, #/s/<a recipe someone sent>).
 // A recipe that is still waiting for review opens on the review screen instead of its own page.
 
 import { init, state } from './store.js';
@@ -15,6 +15,7 @@ import { renderReadSetup } from './ui/read.js';
 import { renderSendSetup } from './ui/send.js';
 import { renderKitchen, cookingToResume } from './ui/kitchen.js';
 import { renderClockSetup } from './ui/clock.js';
+import { renderSent } from './ui/sent.js';
 import { startTimers } from './ui/timers.js';
 import { renderSettings, applyAppearance, appearance } from './ui/settings.js';
 import { startAutoSync, status, onStatus } from './sync/auto.js';
@@ -46,6 +47,7 @@ function route() {
   else if (name === 'read') leave = renderReadSetup(detail);
   else if (name === 'send') leave = renderSendSetup(detail);
   else if (name === 'timers') leave = renderClockSetup(detail);
+  else if (name === 's') leave = renderSent(detail, id);   // a recipe someone sent, carried in the link itself
   else {
     view = 'list';
     detail.replaceChildren(h('div', { class: 'placeholder' },

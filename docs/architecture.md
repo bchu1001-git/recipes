@@ -132,7 +132,12 @@ takes the same grey (`--k-solid`).
   that starts a Clock timer; the timer is noted on the device in the same tap, before the phone leaves
   the app. The app then only keeps count: it cannot see the Clock's timer, raises no alert of its own
   for it, and lets it be cleared. The link is the plain form on purpose, because asking Shortcuts to
-  come back opens Safari instead of the Home Screen app.
+  come back to an `https` address opens Safari instead of the Home Screen app. What does bring the app
+  back is one more action at the end of the Shortcut: Open URLs with `webapp://` and then the app's
+  address without `https://` (`returnAddress` in `js/kitchen.js`, shown with a Copy button on the
+  Timers screen). On an iPhone with iOS 27 that opens the Home Screen app itself, on the step it was
+  left at. It is not a documented address, so the screen also says what to do if a phone calls it
+  invalid: delete the action and come back by hand.
 - **The screen is kept awake** with the Screen Wake Lock API, asked for again each time the app comes
   back to the front, since the browser lets go of it whenever the app leaves the screen. Where it is
   missing or refused the view says so in one quiet line.
@@ -528,22 +533,46 @@ through, each scrolling inside its box, with a way to see them full size. They a
 reminder that an AI service read it and that amounts and times are worth checking, then the lines
 the reader said it was unsure of. After Keep, the recipe page's menu offers the originals again.
 
-## Planned: sending a recipe
+## Sending a recipe
 
-A link to the app with the recipe compressed into the part after `#`, which browsers never send to a
-server. Opening it shows the recipe and includes the same recipe data a normal recipe page has, so the
-recipient's "Save to Recipes" Shortcut can save it.
+Built: `js/share.js` (the rules) and `js/ui/sent.js` (the sheet that makes the link, and the page
+that shows a sent recipe).
+
+- **The link** is the app's address, then `#/s/`, then the recipe. Everything after `#` stays in the
+  browser and is never sent to a server, so nothing is stored anywhere for it. The recipe is JSON with
+  short names (`t` title, `i` ingredient lines, `s` step lines, `m` minutes, `y` serves, `n` notes,
+  `f` where it came from and its link), squeezed with the browser's own `CompressionStream` and
+  written in URL-safe base64 after `z.`; a browser that cannot squeeze writes it plain after `j.`.
+  A usual recipe makes a link of 400 to 1,200 characters. Past 6,000 the sheet warns that some apps
+  cut long links short.
+- **What travels:** the title, the ingredient and step lines as written (a heading is still just a
+  line that ends with a colon), time, servings, where it came from, the notes from the source, and
+  the sender's own notes unless that switch is turned off. Folders, the heart, the rating and
+  pictures stay behind.
+- **Opening it** (`#/s/...`) shows the recipe read-only, with no library and no sign-in needed. A
+  link that was cut short or changed gives one plain sentence. Whatever a link holds is checked for
+  shape and size and is only ever shown as text.
+- **Keeping it.** On an iPhone a link opens in Safari, whose copy of the app has none of the person's
+  recipes, so the way in is the Save to Recipes Shortcut: the page adds an ld+json block of
+  schema.org Recipe data (`recipeData`), through the DOM as text, and the page script and the reader
+  treat it like any recipe page. The block also carries `sentFrom`, this app's own addition: where
+  the recipe first came from and the notes that travelled. The reader takes the source from there
+  (`source.kind` is `shared`), because the page's own address is only the link it was sent in, and
+  it leaves the page layout's groups alone when the data already has heading lines. A copy of the
+  app with a library connected also shows "Keep in my library", which runs the same reader and puts
+  the recipe under To review.
 
 ## Things proven or still to prove
 
 | Question | State |
 | --- | --- |
 | Do popular recipe sites answer an automatic request? | Tested November 2026: 13 of 25 gave full recipe data, 11 refused, 1 used an older format |
-| Can a Home Screen web app start a Clock timer through a Shortcut? | Proven November 2026 on an iPhone with `proofs/timer.html`: the timer starts and rings with the phone locked. The phone is left in Shortcuts afterwards. Asking Shortcuts to come back opens the page in Safari, not the Home Screen app, so the kitchen view should use the plain link and let the person return |
+| Can a Home Screen web app start a Clock timer through a Shortcut? | Proven November 2026 on an iPhone with `proofs/timer.html`: the timer starts and rings with the phone locked. The phone is left in Shortcuts afterwards. Asking Shortcuts to come back opens the page in Safari, not the Home Screen app, so the kitchen view uses the plain link. Later the same month an Open URLs action at the end of the Shortcut, with `webapp://` and the app's address without `https://`, brought the Home Screen app itself back to the front on the same phone |
 | Can a Shortcut read a recipe page and write into a library? | Proven November 2026 on an iPhone with iOS 27: a page shared from Safari arrived under To review. Format Date could not be set up on that phone, so the file is named with a random number, and Show Result is called Show Content there. The page script was also run in a desktop browser on saved copies of ten live recipe pages, with their styles and without their own scripts: the three that group their ingredients gave the right groups, and the seven that do not gave none |
 | Does the web-page reader cope with real recipe pages? | Tested November 2026 on saved copies of one recipe page from each of 23 sites: 22 gave a full recipe; 1 had only the older in-page markup and gave a title and link |
 | Does the free AI reader cope with the owner's own screenshots? | Tried November 2026 on the owner's own samples, five screenshots of two recipes, on a computer: both came back with every ingredient, step, group and note in place, in two to five seconds, and the same whatever order the pictures were given in. One recipe's name was not in its pictures, and its title was suggested from the names of its two groups. Still to be tried from the owner's phone. The larger Gemini models took minutes on the same pictures, or timed out, so the small one is used. Also tried with a real key on six made-up pictures, sent through the app and the importer on a computer: a recipe-site screenshot, a social media caption, a photographed cookbook page with two groups of ingredients, a recipe over two overlapping screenshots, and a page with no recipe. Each recipe came back complete in two to three seconds, with nothing added, the groups as headings, and the overlap read once; the page with no recipe became a failed job. A half written as one character sometimes came back as 1/2. A seventh picture, a recipe card with a stain over one amount, two steps running off its edge and one blurred step, came back with the cut-off words left cut off and those four lines named as unsure |
 | Can a Shortcut send a note's pictures to a library in one go? | Proven November 2026, on an iPhone with iOS 27: a share-sheet Shortcut given a note (Share, Send Copy) receives its pictures, and one more, Notes' own PDF copy of the note as a picture. The file such a Shortcut would send (one picture's base64 to a line, no JSON) was built on a computer from four of the owner's screenshots and a made-up note page, and went through the real importer and reader: the title came from the note page, with every ingredient, step and group and the typed line. The JSON form, with line breaks left in the base64 and the pictures as PNG, gave the same. Then the "Send to Recipes" Shortcut itself, made from the steps in Settings, Send from other apps, sent a note holding four screenshots: all five pictures arrived in one upload of a few megabytes, the recipe came back under To review with its groups and sections, and its title was read from the note page |
 | Does the importer run inside a library on GitHub? | Proven November 2026: with the secret and the workflow file in place, a push of pictures started the run in a private library, and the recipe and its pictures were committed back. That first run came from a shared note; sending from the + button has not been tried on a phone |
-| Does the kitchen view work on an iPhone? | Mostly proven, November 2026, iOS 27: the screen stays awake, a timer in the app counts down and shows its alert at zero, and a timer handed to the Clock app starts there with the view left on the same step. Not proven: the sound. With the phone on silent the tones were not heard. They are now played as "playback" audio and the audio is kept going during the countdown; in a desktop browser that path runs and the tones are scheduled, but a desktop has no silent switch, so it has to be heard on the phone |
+| Does the kitchen view work on an iPhone? | Proven November 2026, iOS 27: the screen stays awake, a timer in the app counts down and shows its alert at zero, and a timer handed to the Clock app starts there with the view left on the same step. With the phone on silent the tones were not heard at first; once they were played as "playback" audio, with the audio kept going during the countdown, they were heard on the same phone |
+| Does a recipe sent as a link arrive and get kept? | Half proven, November 2026, in a desktop browser: the link is made and opened, the real page script reads the opened page, and the reader keeps the recipe with its headings, notes, time, servings and first source; a cut or changed link fails with one sentence. To test between two phones: the link arriving whole through a messaging app, and Save to Recipes on the page it opens in Safari |
 | Does syncing work against real GitHub? | Proven November 2026: an iPhone connected to an empty private library and synced |

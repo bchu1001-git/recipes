@@ -38,7 +38,7 @@ const NOTES = {
   noLock: 'This browser cannot keep the screen awake, so it may dim as usual.',
   lockFailed: 'The screen could not be kept awake this time.',
   here: 'Timers started here ring only while Recipes is open on screen.',
-  clock: 'The timer started in the Clock app. To come back to Recipes, swipe along the bottom edge of the screen.',
+  clock: 'The timer started in the Clock app. If the phone stayed in Shortcuts, swipe along the bottom edge to come back. Settings, Timers has a step that brings Recipes back by itself.',
 };
 
 /**

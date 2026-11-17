@@ -205,9 +205,14 @@ To try the reader on a computer first, see "Run the tests" in the README.
 **The "Recipe Timer" Shortcut.** Only needed if timers in the kitchen view should run in the
 iPhone's Clock app, where they ring even with the phone locked. Without it, timers run inside Recipes
 and ring only while the app is open on screen. Open Recipes, then **Settings**, **Timers**, and choose
-**In the Clock app**: the screen that opens has the three steps for making the Shortcut and a button
-to try it. Each iPhone makes its own and chooses for itself. The steps were run on an iPhone with
-iOS 27 in November 2026.
+**In the Clock app**: the screen that opens has the steps for making the Shortcut, one more step
+that brings Recipes back to the front by itself once the timer has started, and a button to try it.
+Each iPhone makes its own and chooses for itself. The steps were run on an iPhone with iOS 27 in
+November 2026.
+
+**Sending a recipe to someone.** Nothing to set up: open a recipe, tap the three dots, then **Send
+this recipe**. The link holds the recipe itself. Whoever opens it can read it, and keeps it in their
+own library with their Save to Recipes Shortcut.
 
 This will be written out in full when the part it belongs to is built:
 

@@ -155,6 +155,20 @@ export function timerLink(minutes) {
   return 'shortcuts://run-shortcut?name=Recipe%20Timer&input=text&text=' + whole;
 }
 
+/**
+ * The address that brings the Home Screen app itself back to the front when a Shortcut opens it:
+ * "webapp://" and then where the app is served, without "https://" and without any file name. Put in
+ * an Open URLs action at the end of the Recipe Timer Shortcut, it returns the person to the kitchen
+ * view once the timer has started. Proven on an iPhone with iOS 27 in November 2026; an ordinary
+ * https address opens Safari instead. Empty when the host is not known.
+ */
+export function returnAddress(host, pathname) {
+  const where = String(host || '').trim();
+  if (!where) return '';
+  const folder = String(pathname || '/').replace(/[?#].*$/, '').replace(/[^/]*$/, '');
+  return 'webapp://' + where + (folder.startsWith('/') ? folder : '/' + folder);
+}
+
 // ---------- ticked ingredients ----------
 
 /** How long ticked ingredients are kept once the last one was ticked: one cooking session, not next week's. */

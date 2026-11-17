@@ -6,6 +6,7 @@ import { state, subscribe, saveRecipe, deleteRecipe, foldsFor, setFold } from '.
 import { ui, setUi, ticksFor, keepTicks } from './state.js';
 import { amountLabel, itemLabel, formatMinutes, folderIndex, webLink, partsOf, isHeading } from '../model.js';
 import { openPictures } from './pictures.js';
+import { openSend } from './sent.js';
 
 const TABS = [['ing', 'Ingredients'], ['steps', 'Steps'], ['notes', 'Notes']];
 
@@ -16,6 +17,7 @@ function menu(recipe) {
     h('div', { class: 'actions' },
       h('a', { class: 'action', href: '#/edit/' + recipe.id, onclick: close }, 'Edit'),
       h('button', { class: 'action', type: 'button', onclick: () => { close(); folderPicker(recipe.id); } }, 'Folders'),
+      h('button', { class: 'action', type: 'button', onclick: () => { close(); openSend(recipe); } }, 'Send this recipe'),
       pictures.length ? h('button', { class: 'action', type: 'button', onclick: () => { close(); openPictures(pictures); } },
         pictures.length === 1 ? 'See the original picture' : 'See the original pictures') : null,
       h('button', { class: 'action is-danger', type: 'button', onclick: async () => {

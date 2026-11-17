@@ -400,3 +400,11 @@ textarea.input { resize: vertical; line-height: 1.4; min-height: 5rem; }
 .timer-alert-btn.is-main { background: var(--onacc); color: var(--acc); border-color: transparent; }
 @keyframes timer-pulse { 50% { transform: scale(1.025); } }
 @media (prefers-reduced-motion: reduce) { .timer-alert-row { animation: none; } }
+
+/* Sending a recipe as a link, and the read-only page that shows one that was sent. */
+.send { display: flex; flex-direction: column; gap: 12px; padding-bottom: 14px; }
+.send-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 17px; }
+.send-check input { width: 22px; height: 22px; accent-color: var(--acc); }
+.sent .label { margin-top: 16px; }
+.sent-keep { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ing-plain .ing-row { grid-template-columns: 5.5rem minmax(0, 1fr); }
