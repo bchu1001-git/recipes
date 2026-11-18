@@ -29,7 +29,7 @@ Built and working:
 - **To review:** a recipe that arrives from outside waits apart from the others until you keep it or
   discard it. Its screen shows where it came from, a link to the original, what looks missing, and
   the same fields as the editor.
-- Saving a recipe page from Safari. The "Save to Recipes" Shortcut puts the page in the library's
+- Saving a recipe page from Safari. The "Save Webpage to Recipes" Shortcut puts the page in the library's
   `inbox/`, and the next sync turns it into a recipe to review, read from the recipe data the page
   carries. The groups a page shows its ingredients in ("For the chicken", "For the salsa") arrive
   as headings. The Shortcut is made by hand from the steps in Settings, Save from Safari; they were
@@ -45,7 +45,7 @@ Built and working:
   pointed out. The pictures stay with the recipe afterwards. While
   they are being read the list says so, and if they cannot be read it gives the reason, with Try
   again and Discard. A library is set up for this once, from the steps in Settings, Read photos.
-- Sending pictures from another app. The "Send to Recipes" Shortcut sits in the share sheet. A note
+- Sending pictures from another app. The "Send Notes/Photos to Recipes" Shortcut sits in the share sheet. A note
   that holds pictures of a recipe, or pictures in the photo library, go to the library as one file
   with the pictures inside it, without a trip through the photo library. The Shortcut has eight
   actions and nothing in it is put together by hand. The importer unpacks that
@@ -70,12 +70,12 @@ Built and working:
   Several timers can run at once, and they survive a reload.
 - Sending a recipe to someone as a link. "Send this recipe" on a recipe's menu makes a link with the
   recipe itself inside it, in the part after `#`, which is never sent to a server. Whoever opens it
-  can read the recipe with no app and no sign-in, and keeps it with the Save to Recipes Shortcut, or
+  can read the recipe with no app and no sign-in, and keeps it with the Save Webpage to Recipes Shortcut, or
   with one button where their copy of the app has a library connected. Your own notes go along only
   if you leave that switch on. Pictures, folders, the heart and the rating do not travel.
 
 Reading pictures inside a library was proven in November 2026. With the key saved as a secret and
-the workflow file added, a note shared from an iPhone (iOS 27) with the Send to Recipes Shortcut
+the workflow file added, a note shared from an iPhone (iOS 27) with the Send Notes/Photos to Recipes Shortcut
 reached the library, was read there, and came back under To review with its pictures, groups and
 title. Sending pictures from the + button uses the same reader but has not been tried on a phone.
 
@@ -86,13 +86,18 @@ on silent; after the sound was changed to play on silent it was heard on the sam
 action at the end of the Recipe Timer Shortcut, with `webapp://` in front of the app's address,
 brought the Home Screen app itself back to the front after the timer started.
 
-Sending a recipe as a link has been run in a browser on a computer only: making the link, opening it,
-the real page script reading the opened page, and the reader keeping it with its headings, notes and
-first source. Still to be tried between two phones: the link arriving whole through a messaging app,
-and Save to Recipes on the page it opens.
+Sending a recipe as a link was tried on an iPhone with iOS 27 in November 2026: a recipe sent through
+Messages arrived whole, opened in Safari, and Save Webpage to Recipes kept it under To review with its
+headings. It has not yet gone between two people's phones.
 
-Not built yet, in this order: pasting a link inside the app and importing a bookmarks file, and the
-guided steps for adding a second person to a library or starting a second library. See [docs/decisions.md](docs/decisions.md) for what was decided and
+Two people sharing one library was proven in November 2026. A second person with a GitHub account of
+their own, invited to the organization with the base permission set to Write, connected their own
+iPhone with their own key, saw every recipe, and saved a recipe from Safari with their own Shortcut.
+
+Not built yet: one photo for each recipe, which the decisions ask for. Next comes the second phase
+from the decisions, starting with a shopping list, a pantry list and US and metric conversion. After
+that, a second household's library, set up by hand with the steps in docs/setup.md. Set aside until
+asked for: pasting a link inside the app and importing a bookmarks file. See [docs/decisions.md](docs/decisions.md) for what was decided and
 [docs/architecture.md](docs/architecture.md) for how the pieces will fit.
 
 A device that is not connected to a library keeps its recipes only in its own browser. Use Settings,
@@ -175,9 +180,9 @@ on the other. If both changed the same lines it stops and says which files, with
 | `js/jobs.js` | The rules for a picture job, shared by the app and the importer: its file and folder names, what its file holds, how small a picture is made, the file a Shortcut shares whole with its pictures inside it, and the workflow file a library needs |
 | `js/sync/` | Syncing: `github.js` (the few GitHub calls), `merge.js` (how two copies become one), `sync.js` (one round, including pages waiting in the inbox and pictures on their way to being read), `auto.js` (when to sync), `originals.js` (fetching the pictures a recipe was read from, and keeping them on the device) |
 | `js/import/` | Reading recipes that come from outside. `page.js` turns the recipe data a web page carries into a recipe waiting for review; syncing uses it for pages in the inbox |
-| `shortcuts/` | `save-page.js`, the script the "Save to Recipes" Shortcut runs on the page open in Safari |
+| `shortcuts/` | `save-page.js`, the script the "Save Webpage to Recipes" Shortcut runs on the page open in Safari |
 | `importer/` | What a library runs when pictures arrive, in Node with no packages: `run.mjs` (the command), `jobs.mjs` (works through the waiting jobs), `unpack.mjs` (finds the pictures in a file that was shared whole), `reading.mjs` (from what was read to a recipe), `git.mjs` (the commit), and `readers/` (the AI reader, `gemini.mjs`, and a stand-in). It uses `js/model.js`, `js/jobs.js`, `js/import/page.js` and `js/sync/merge.js`, so those must stay free of anything only a browser has. The app never loads it |
-| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `photos.js` (choosing pictures to send), `send.js` (the steps for the Send to Recipes Shortcut), `pictures.js` (showing the pictures a recipe was read from), `save.js` (the steps for making the Shortcut and for updating its script), `read.js` (the steps for setting a library up to read pictures), `kitchen.js` (the kitchen view), `timers.js` (the running timers, the alert at zero and its sound), `clock.js` (the steps for the Recipe Timer Shortcut), `sent.js` (making the link for a recipe, and the page that shows one that was sent), `settings.js`, `state.js` (what is on screen now, and the ticked ingredients), and helpers in `dom.js` |
+| `js/ui/` | The screens: `home.js` (list, filters, sidebar, To review), `recipe.js`, `editor.js`, `review.js` (keep or discard a recipe that arrived), `photos.js` (choosing pictures to send), `send.js` (the steps for the Send Notes/Photos to Recipes Shortcut), `pictures.js` (showing the pictures a recipe was read from), `save.js` (the steps for making the Shortcut and for updating its script), `read.js` (the steps for setting a library up to read pictures), `kitchen.js` (the kitchen view), `timers.js` (the running timers, the alert at zero and its sound), `clock.js` (the steps for the Recipe Timer Shortcut), `sent.js` (making the link for a recipe, and the page that shows one that was sent), `settings.js`, `state.js` (what is on screen now, and the ticked ingredients), and helpers in `dom.js` |
 | `js/sample.js` | Three made-up example recipes |
 | `sw.template.js` | The worker that keeps a copy of the app for offline use. Edit this one |
 | `sw.js`, `js/version.js` | Generated from the template by `scripts/publish.sh` on every publish. Never edit by hand |

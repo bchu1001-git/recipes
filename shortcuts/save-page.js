@@ -1,4 +1,4 @@
-// Save to Recipes: the script for the Shortcut's "Run JavaScript on Web Page" action.
+// Save Webpage to Recipes: the script for the Shortcut's "Run JavaScript on Web Page" action.
 //
 // It reads the recipe data that the page open in Safari carries about itself, and hands it to the
 // Shortcut as one piece of text, ready to be written into the library's inbox. It reads this one page

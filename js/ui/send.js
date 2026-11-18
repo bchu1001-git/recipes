@@ -1,4 +1,4 @@
-// How to make the "Send to Recipes" Shortcut, step by step, with every piece of text ready to copy.
+// How to make the "Send Notes/Photos to Recipes" Shortcut, step by step, with every piece of text ready to copy.
 // It sits in the share sheet of other apps. Given a note that holds pictures of a recipe, or pictures
 // from the photo library, it writes them into the connected library as one file, inbox/job-<number>.json,
 // holding the base64 of each picture on a line of its own. The library's importer unpacks that file
@@ -23,7 +23,7 @@ export function renderSendSetup(root) {
 
     const bar = h('header', { class: 'bar bar-detail' },
       h('a', { class: 'back', href: '#/settings' }, icon('back'), 'Settings'),
-      h('span', { class: 'bar-heading', text: 'Send to Recipes' }),
+      h('span', { class: 'bar-heading', text: 'Send from other apps' }),
       h('span', { class: 'bar-spacer' }));
 
     if (!config) {
@@ -36,13 +36,13 @@ export function renderSendSetup(root) {
 
     const address = 'https://api.github.com/repos/' + config.owner + '/' + config.repo + '/contents/inbox/job-';
     const keyForm = 'https://github.com/settings/personal-access-tokens/new?name=Recipes+Send+Shortcut'
-      + '&description=' + encodeURIComponent('Lets the Send to Recipes Shortcut add pictures to the library')
+      + '&description=' + encodeURIComponent('Lets the Send Notes/Photos to Recipes Shortcut add pictures to the library')
       + '&target_name=' + encodeURIComponent(config.owner) + '&expires_in=none&contents=write';
 
     root.replaceChildren(h('div', { class: 'pane-scroll' }, bar,
       h('div', { class: 'settings' },
         h('p', { class: 'set-note' },
-          'This puts ', b('Send to Recipes'), ' in the share sheet of other apps. Share a note that holds pictures of a recipe, or pictures from Photos, and they go to your library to be read. The recipe then shows up here under To review, with no trip through the photo library. You make the Shortcut once, by hand, on this iPhone. It has eight actions and takes about ten minutes.'),
+          'This puts ', b('Send Notes/Photos to Recipes'), ' in the share sheet of other apps. Share a note that holds pictures of a recipe, or pictures from Photos, and they go to your library to be read. The recipe then shows up here under To review, with no trip through the photo library. You make the Shortcut once, by hand, on this iPhone. It has eight actions and takes about ten minutes.'),
         h('p', { class: 'howto-note', text: library.base.reader === true
           ? 'As of the last sync, this library is set up to read pictures, which this Shortcut relies on.'
           : 'This library is not set up to read pictures yet, and this Shortcut relies on that. Do Settings, Read photos first.' }),
@@ -55,7 +55,7 @@ export function renderSendSetup(root) {
 
         h('ol', { class: 'howto' },
           step('Start the Shortcut',
-            p('Open the ', b('Shortcuts'), ' app and tap ', b('+'), '. Tap the name at the top, choose ', b('Rename'), ', and call it ', b('Send to Recipes'), '.')),
+            p('Open the ', b('Shortcuts'), ' app and tap ', b('+'), '. Tap the name at the top, choose ', b('Rename'), ', and call it ', b('Send Notes/Photos to Recipes'), '.')),
 
           step('Put it in the share sheet',
             p('This is a setting of the Shortcut, not an action, so it is not in the action search. At the bottom of the Shortcut\'s screen there is a small ', b('i'), ' in a circle. Tap it to open ', b('Details'), ', turn on ', b('Show in Share Sheet'), ', then tap ', b('Done'), ' or the tick.'),
@@ -96,7 +96,7 @@ export function renderSendSetup(root) {
           // The key comes last on purpose: once copied, nothing else should be copied before it is pasted.
           step('Put the key in',
             p('The Shortcut writes into ', b(config.owner + '/' + config.repo), ', so it needs a key in the ', b('Authorization'), ' header. It is not the key this app uses. There are two ways to get one.'),
-            p(b('If you have made Save to Recipes:'), ' it can share that Shortcut\'s key. Open Save to Recipes for editing, tap the text of its Authorization header, choose ', b('Select All'), ' and ', b('Copy'), '. Come back to this Shortcut and paste it as the text of the Authorization header here. It starts with the word Bearer.'),
+            p(b('If you have made Save Webpage to Recipes:'), ' it can share that Shortcut\'s key. Open Save Webpage to Recipes for editing, tap the text of its Authorization header, choose ', b('Select All'), ' and ', b('Copy'), '. Come back to this Shortcut and paste it as the text of the Authorization header here. It starts with the word Bearer.'),
             p(b('Otherwise, make a new key:'), ' open the form below. ', b('Resource owner'), ' should say ', b(config.owner), '. Under ', b('Repository access'), ' choose ', b('Only select repositories'), ', then ', b(config.repo), '. ', b('Contents'), ' should say ', b('Read and write'), '. Generate the token and copy it. GitHub shows it only once, so copy nothing else: go straight back to Shortcuts and, as the text of the Authorization header, type the word below, a space, and then paste. It ends up looking like Bearer github_pat_...'),
             h('a', { class: 'btn btn-quiet', href: keyForm, target: '_blank', rel: 'noopener noreferrer' }, 'Open GitHub\'s new key form'),
             piece('Bearer'),
@@ -106,7 +106,7 @@ export function renderSendSetup(root) {
             p('Add the action ', b('Show Content'), ', which older versions call ', b('Show Result'), ', and make sure it shows ', b('Contents of URL'), '. Then tap ', b('Done'), '.')),
 
           step('Try it',
-            p('In Notes, open a note that holds pictures of a recipe. Tap ', b('Share'), ' and, if it offers a choice, ', b('Send Copy'), '. Choose ', b('Send to Recipes'), '. It may be far down the list.'),
+            p('In Notes, open a note that holds pictures of a recipe. Tap ', b('Share'), ' and, if it offers a choice, ', b('Send Copy'), '. Choose ', b('Send Notes/Photos to Recipes'), '. It may be far down the list.'),
             p('The first time, the phone asks whether the Shortcut may connect to api.github.com. Allow it.'),
             p('A result then appears. If it mentions content and commit, the pictures are in your library. Come back to Recipes and pull the list down to sync: it shows pictures from another app being read, and within a minute or two the recipe appears under ', b('To review'), '.'),
             p('Give the recipe its title while you review it. A note is shared as its pictures plus one picture of the whole note, and the reader looks at that one for the title, but it may not find it.'))),

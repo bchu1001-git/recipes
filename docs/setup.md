@@ -167,17 +167,24 @@ up; the others receive them.
 Only the people you invite can see the library. Nobody else can, and a second household's library is
 a separate repository in their own account.
 
-1. In the organization, **People**, then **Invite member**.
-2. Let members change recipes: organization **Settings**, **Member privileges**, and under
+1. They need a GitHub account of their own. If they have none, they make one at github.com/signup
+   and confirm their email first.
+2. In the organization, **People**, then **Invite member**, and invite them by their username.
+3. Let members change recipes: organization **Settings**, **Member privileges**, and under
    **Base permissions** choose **Write**, then confirm. Without this a member can read the library
    but the app cannot save their changes.
-3. Once they accept, they make their own key with the link in step 4 and connect the app the same way.
+4. Once they accept, they make their own key with the link in step 4 and connect the app the same way.
+5. They make their own Save Webpage to Recipes and Send Notes/Photos to Recipes Shortcuts on their own
+   phone, from the steps in the app's Settings, with their own key. A Shortcut copied from another
+   phone carries that person's key inside it. Recipe Timer holds no key, so it can be shared with
+   AirDrop instead.
+
+This was done for a second person in November 2026.
 
 ## Part 4: saving from Safari, reading photos, timers, and later steps
 
-**The "Save to Recipes" Shortcut.** Its steps are inside the app, with your library's own address
-filled in: open Recipes, then **Settings**, **Save from Safari**, **Set up or update Save to
-Recipes**. The Shortcut is made by hand on each iPhone and gets a key of its own. The steps were run
+**The "Save Webpage to Recipes" Shortcut.** Its steps are inside the app, with your library's own address
+filled in: open Recipes, then **Settings**, **Save from Safari**, **Set up or update Save Webpage to Recipes**. The Shortcut is made by hand on each iPhone and gets a key of its own. The steps were run
 on an iPhone with iOS 27 in November 2026; names can differ a little on other versions.
 
 When the app learns to read more from a page, the script inside the Shortcut has to be replaced. The
@@ -192,13 +199,17 @@ steps were run against a real library in November 2026.
 
 A second library, such as another household's, repeats those three steps with a key of its own.
 
-**The "Send to Recipes" Shortcut.** For recipes kept as pictures in another app, such as screenshots
+**The "Send Notes/Photos to Recipes" Shortcut.** For recipes kept as pictures in another app, such as screenshots
 in a note: this Shortcut sits in the share sheet and sends a note's pictures straight to the library
 to be read, with no trip through the photo library. It relies on reading photos being set up first.
 Its steps are inside the app, with your library's own address filled in: open Recipes, then
-**Settings**, **Send from other apps**, **Set up Send to Recipes**. It is made by hand on each iPhone
-and can share the key of the Save to Recipes Shortcut. The steps were run on an iPhone with iOS 27 in
+**Settings**, **Send from other apps**, **Set up Send Notes/Photos to Recipes**. It is made by hand on each iPhone
+and can share the key of the Save Webpage to Recipes Shortcut. The steps were run on an iPhone with iOS 27 in
 November 2026.
+
+Both Shortcuts appear in Safari's share sheet: Apple notes that a Shortcut that takes pictures is
+offered for web pages too, since a page can contain pictures. Their names say which is which; for a
+web page, use Save Webpage to Recipes.
 
 To try the reader on a computer first, see "Run the tests" in the README.
 
@@ -212,7 +223,7 @@ November 2026.
 
 **Sending a recipe to someone.** Nothing to set up: open a recipe, tap the three dots, then **Send
 this recipe**. The link holds the recipe itself. Whoever opens it can read it, and keeps it in their
-own library with their Save to Recipes Shortcut.
+own library with their Save Webpage to Recipes Shortcut.
 
 This will be written out in full when the part it belongs to is built:
 

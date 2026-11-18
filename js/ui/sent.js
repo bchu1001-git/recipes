@@ -2,7 +2,7 @@
 //
 // The link holds the recipe itself (see js/share.js), so the page needs no library and no sign-in:
 // anyone who opens it can read the recipe. To keep it, the page carries the same kind of recipe data
-// a recipe site's page has, which is what the Save to Recipes Shortcut reads. On an iPhone a link
+// a recipe site's page has, which is what the Save Webpage to Recipes Shortcut reads. On an iPhone a link
 // opens in Safari, not in the Home Screen app, so that Shortcut is the way into the person's library.
 // A copy of the app that has a library connected (in a computer's browser, say) can keep it directly.
 //
@@ -99,7 +99,7 @@ export function renderSent(root, packed) {
   const pageTitle = document.title;
   let live = true;
   let data = null;
-  let block = null;   // the recipe data added to the page for the Save to Recipes Shortcut
+  let block = null;   // the recipe data added to the page for the Save Webpage to Recipes Shortcut
 
   const frame = (...kids) => h('div', { class: 'pane-scroll' },
     h('header', { class: 'bar bar-detail' },
@@ -134,7 +134,7 @@ export function renderSent(root, packed) {
           meta.length && (data.f.n || link) ? ' · ' : '',
           link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', text: data.f.n || 'Source' }) : data.f.n),
         h('div', { class: 'howto-note sent-keep' },
-          h('p', { text: 'To keep this recipe on an iPhone, tap Share, then Save to Recipes. It arrives in your Recipes app under To review.' }),
+          h('p', { text: 'To keep this recipe on an iPhone, tap Share, then Save Webpage to Recipes. It arrives in your Recipes app under To review.' }),
           library.config
             ? h('button', { class: 'btn btn-main', type: 'button', onclick: keepHere }, 'Keep in my library')
             : null),

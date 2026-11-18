@@ -21,9 +21,12 @@ were turned down are listed where they explain a choice.
 
 ## How recipes get in
 
-- **Links:** the main route is a "Save to Recipes" Shortcut in the Safari share sheet, which reads the
+- **Links:** the main route is a "Save Webpage to Recipes" Shortcut in the Safari share sheet, which reads the
   recipe data from the page that is open. Pasting a link inside the app is a convenience: a test of 25
   popular sites found that 11 refuse automatic requests, so a server-side fetch works on about half.
+- **Shortcut names** (the owner's choice, November 2026): "Save Webpage to Recipes" for web pages and
+  "Send Notes/Photos to Recipes" for pictures in a note or the photo library. Both appear in Safari's
+  share sheet, so the names say which is which.
 - **Screenshots and photos:** read by a free AI tier (Gemini to start), called from a GitHub Action so
   the key never sits on a device. The reader must stay swappable. A paid reader was priced at about
   0.2 cents a recipe and turned down for now; no "retry with a stronger reader" button.
@@ -76,7 +79,9 @@ were turned down are listed where they explain a choice.
 
 ## Building and maintaining
 
-- Build order: the core app, links, photos, kitchen view, people, finishing.
+- Build order: the core app, links, photos, kitchen view, people, finishing. By the owner's choice in
+  November 2026, the second phase (under "Later" below) comes before a second household's library is
+  set up.
 - Three things are proven on a real phone before the parts that depend on them: saving from Safari
   with the Shortcut, handing a timer to the Clock, and the AI reader on the owner's own screenshots.
 - The owner publishes every change themselves with `scripts/publish.sh`. No GitHub key is stored on
@@ -86,4 +91,5 @@ were turned down are listed where they explain a choice.
 ## Later, after version 1
 
 Look-alike check, scaling servings, US and metric, a pantry list, a shopping list, a fridge photo
-that proposes pantry changes, "what can I make", print and export.
+that proposes pantry changes, "what can I make", print and export. The owner named the shopping list,
+the pantry list and US and metric conversion first (November 2026).

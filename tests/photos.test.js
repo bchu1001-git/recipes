@@ -395,7 +395,7 @@ test('photos: a job that failed on the importer’s side is shown without being 
 
 // ---------- pictures shared whole by a Shortcut: one file with the pictures inside it ----------
 
-const NO_PICTURE = 'No picture was found in what was shared. In the Send to Recipes Shortcut, check that Convert Image says JPEG.';
+const NO_PICTURE = 'No picture was found in what was shared. In the Send Notes/Photos to Recipes Shortcut, check that Convert Image says JPEG.';
 const PICTURE = (n, size = 9000) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(size, n), Buffer.from([0xff, 0xd9])]);
 const sharedFile = (pictures) => JSON.stringify({ job: 'photos', pictures: pictures.map((p) => p.toString('base64')) });
 
@@ -499,7 +499,7 @@ test('photos: what was shared with no picture in it comes back with the reason, 
   assert.equal([...hub.snapshot().keys()].some((path) => path.startsWith('inbox/')), false);
 });
 
-// ---------- exactly what the Send to Recipes Shortcut sends: one picture's base64 to a line, and no JSON ----------
+// ---------- exactly what the Send Notes/Photos to Recipes Shortcut sends: one picture's base64 to a line, and no JSON ----------
 
 const plainFile = (pictures) => pictures.map((p) => p.toString('base64')).join('\n');
 

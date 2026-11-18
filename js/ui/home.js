@@ -28,7 +28,7 @@ function openAdd() {
     h('div', { class: 'actions' },
       h('a', { class: 'action', href: '#/new', onclick: close }, 'Type it in'),
       h('a', { class: 'action', href: '#/photos', onclick: close }, 'From photos or screenshots')),
-    h('p', { class: 'sheet-text', text: 'For a recipe on a web page, share the page from Safari with Save to Recipes instead.' }),
+    h('p', { class: 'sheet-text', text: 'For a recipe on a web page, share the page from Safari with Save Webpage to Recipes instead.' }),
   ]);
 }
 

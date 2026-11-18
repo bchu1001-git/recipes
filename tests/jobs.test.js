@@ -176,7 +176,7 @@ test('jobs: a job with no pictures is only ever one that failed', () => {
 });
 
 test('jobs: whatever sits under a job file\u2019s name and is not somebody else\u2019s was shared by a Shortcut', () => {
-  // What the Send to Recipes Shortcut sends is not JSON at all: one picture's base64 to a line.
+  // What the Send Notes/Photos to Recipes Shortcut sends is not JSON at all: one picture's base64 to a line.
   assert.equal(isShared(null), true);
   assert.equal(isShared(undefined), true);
   assert.equal(isShared('some text'), true);

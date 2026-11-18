@@ -697,7 +697,7 @@ test('importer: when a shared file cannot be read, what is left is an ordinary j
   await rm(dir, { recursive: true, force: true });
 });
 
-const NO_PICTURE = 'No picture was found in what was shared. In the Send to Recipes Shortcut, check that Convert Image says JPEG.';
+const NO_PICTURE = 'No picture was found in what was shared. In the Send Notes/Photos to Recipes Shortcut, check that Convert Image says JPEG.';
 
 test('importer: a shared file with no picture in it becomes a failed job that says so, without asking the reader', async () => {
   const dir = await library();
@@ -733,7 +733,7 @@ test('importer: a shared file with no picture in it becomes a failed job that sa
   await rm(dir, { recursive: true, force: true });
 });
 
-// ---------- exactly what the Send to Recipes Shortcut sends: one picture's base64 to a line, and no JSON ----------
+// ---------- exactly what the Send Notes/Photos to Recipes Shortcut sends: one picture's base64 to a line, and no JSON ----------
 
 const oneToALine = (pictures, breaks = '') => pictures.map((p) => (breaks ? p.toString('base64').replace(/(.{76})/g, '$1' + breaks) : p.toString('base64'))).join('\n');
 

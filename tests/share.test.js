@@ -131,7 +131,7 @@ test('keeping: the page\'s recipe data goes through the reader with headings, no
   const block = recipeData(data);
   assert.equal(block['@type'], 'Recipe');
   assert.equal(block.totalTime, 'PT45M');
-  // As the Save to Recipes Shortcut saves it: the page's own address is the long link it was sent in.
+  // As the Save Webpage to Recipes Shortcut saves it: the page's own address is the long link it was sent in.
   const capture = { v: 1, s: 2, url: 'https://someone.example/recipes/#/s/' + 'z.abc', title: data.t, ld: [JSON.stringify(block)] };
   const { recipe, found, problems } = recipeFromCapture(capture, NOW);
   assert.equal(found, true);

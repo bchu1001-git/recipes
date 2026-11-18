@@ -17,7 +17,7 @@
 // person asks for another try, which takes those two fields out again, or discards it.
 //
 // A Shortcut that shares pictures from another app (a note, say) cannot make several files in one go,
-// so it sends one file that carries its pictures inside it, as base64. The "Send to Recipes" Shortcut
+// so it sends one file that carries its pictures inside it, as base64. The "Send Notes/Photos to Recipes" Shortcut
 // sends the plainest form there is, one picture to a line and nothing else:
 //
 //   inbox/job-<number>.json   <base64 of a picture>
@@ -122,7 +122,7 @@ export function readJob(data, path) {
 /**
  * Whether a job file that is not an ordinary job is one that was shared whole, with its pictures
  * inside it. `data` is what the file holds as JSON, or null when it is not JSON at all, which is what
- * the Send to Recipes Shortcut sends. Only two things are somebody else's and never touched: a job
+ * the Send Notes/Photos to Recipes Shortcut sends. Only two things are somebody else's and never touched: a job
  * that names picture files (an ordinary job, or one from a newer version of the app), and a job that
  * says it is of another kind. Everything else under a job file's name came from a Shortcut, so the
  * importer unpacks it, or says plainly that it found no picture in it.

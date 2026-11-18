@@ -224,7 +224,7 @@ test('client: reports whether the key may write', async () => {
 
 const INBOX_FILE = 'inbox/20251231-230000.json';
 const SAVED_AT = '2025-12-31T23:00:00.000Z';
-// A page as the Save to Recipes Shortcut would save it. The site and the recipe are made up.
+// A page as the Save Webpage to Recipes Shortcut would save it. The site and the recipe are made up.
 const page = (more = {}) => ({
   v: 1,
   url: 'https://www.maplestreetkitchen.example/recipes/lentil-soup',

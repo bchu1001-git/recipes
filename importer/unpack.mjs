@@ -1,7 +1,7 @@
 // Finds the pictures in a job file that carries them inside it.
 //
 // A Shortcut that shares pictures from another app (a note, the photo library) cannot make several
-// files in one go, so it sends one, inbox/job-<number>.json. The Send to Recipes Shortcut sends the
+// files in one go, so it sends one, inbox/job-<number>.json. The Send Notes/Photos to Recipes Shortcut sends the
 // base64 of each picture on a line of its own and nothing else. The tidier form, for anything else
 // that sends pictures this way, is JSON:
 //

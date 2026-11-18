@@ -96,7 +96,7 @@ export function fakeGitHub({ token = 'good-key', empty = true, canWrite = true }
       head = body.sha;
       return [200, { object: { sha: head } }];
     }
-    // "Create a file": what starts an empty library, and what the Save to Recipes Shortcut calls.
+    // "Create a file": what starts an empty library, and what the Save Webpage to Recipes Shortcut calls.
     if (method === 'PUT' && (m = /^\/contents\/(.+)$/.exec(path))) {
       if (!canWrite) return [403, { message: 'Resource not accessible by personal access token' }];
       if (!body || typeof body.content !== 'string' || !body.message) return [422, { message: 'Invalid request.' }];

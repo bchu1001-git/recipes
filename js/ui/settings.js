@@ -195,12 +195,12 @@ export function renderSettings(root) {
         h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Save from Safari' }),
           h('p', { class: 'set-note', text: library.config
-            ? 'Put Save to Recipes in Safari\u2019s share sheet. A recipe page you are reading then lands here, under To review.'
+            ? 'Put Save Webpage to Recipes in Safari\u2019s share sheet. A recipe page you are reading then lands here, under To review.'
             : 'Saving a recipe page from Safari writes it into your library, so connect a library first.' }),
           library.config && scriptIsOld()
             ? h('p', { class: 'set-note', text: 'A page was saved by a Shortcut with an older script. The steps screen shows how to put the new one in.' })
             : null,
-          library.config ? h('a', { class: 'btn btn-quiet', href: '#/save' }, 'Set up or update Save to Recipes') : null),
+          library.config ? h('a', { class: 'btn btn-quiet', href: '#/save' }, 'Set up or update Save Webpage to Recipes') : null),
 
         h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Read photos' }),
@@ -216,9 +216,9 @@ export function renderSettings(root) {
           h('p', { class: 'set-note', text: !library.config
             ? 'Pictures of a recipe kept in a note, or in Photos, can be shared straight to your library. Connect a library first.'
             : library.base.reader === true
-              ? 'Put Send to Recipes in the share sheet. A note that holds pictures of a recipe, or pictures from Photos, then goes straight to your library to be read.'
+              ? 'Put Send Notes/Photos to Recipes in the share sheet. A note that holds pictures of a recipe, or pictures from Photos, then goes straight to your library to be read.'
               : 'Pictures of a recipe kept in a note, or in Photos, can be shared straight to your library. It relies on Read photos, so set that up first.' }),
-          library.config ? h('a', { class: 'btn btn-quiet', href: '#/send' }, 'Set up Send to Recipes') : null),
+          library.config ? h('a', { class: 'btn btn-quiet', href: '#/send' }, 'Set up Send Notes/Photos to Recipes') : null),
 
         h('section', { class: 'set' },
           h('h2', { class: 'label', text: 'Backup' }),

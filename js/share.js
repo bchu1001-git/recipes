@@ -1,7 +1,7 @@
 // Sending a recipe to someone as a link. The whole recipe travels inside the link, in the part after
 // "#", which a browser never sends to a server, so nothing is stored anywhere for it. This file holds
 // the rules with no screen in them: what travels, how it is packed into a link and unpacked again,
-// and the recipe data that the page showing a sent recipe carries, so that the Save to Recipes
+// and the recipe data that the page showing a sent recipe carries, so that the Save Webpage to Recipes
 // Shortcut can keep it like any other recipe page.
 //
 // A link is   <the app's address>#/s/<form>.<text>

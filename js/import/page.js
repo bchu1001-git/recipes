@@ -2,7 +2,7 @@
 // and turns it into this app's recipe shape. Pure string and data code: no screen, no storage and no
 // network, so it runs the same in a browser, in the tests, and later in the importer on GitHub.
 //
-// A "capture" is the small file the Save to Recipes Shortcut writes into a library's inbox/:
+// A "capture" is the small file the Save Webpage to Recipes Shortcut writes into a library's inbox/:
 //
 //   {
 //     v:     1

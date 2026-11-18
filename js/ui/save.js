@@ -1,4 +1,4 @@
-// How to make the "Save to Recipes" Shortcut, step by step, with every piece of text ready to copy,
+// How to make the "Save Webpage to Recipes" Shortcut, step by step, with every piece of text ready to copy,
 // and how to put a newer script into it later. The Shortcut runs shortcuts/save-page.js on the page
 // open in Safari and writes the result into the connected library's inbox/. The next sync turns it
 // into a recipe under To review. The steps were corrected against a run on an iPhone with iOS 27.
@@ -62,7 +62,7 @@ export function renderSaveSetup(root) {
 
     const address = 'https://api.github.com/repos/' + config.owner + '/' + config.repo + '/contents/inbox/';
     const keyForm = 'https://github.com/settings/personal-access-tokens/new?name=Recipes+Save+Shortcut'
-      + '&description=' + encodeURIComponent('Lets the Save to Recipes Shortcut add pages to the library')
+      + '&description=' + encodeURIComponent('Lets the Save Webpage to Recipes Shortcut add pages to the library')
       + '&target_name=' + encodeURIComponent(config.owner) + '&expires_in=none&contents=write';
 
     const copyScript = () => (script
@@ -72,7 +72,7 @@ export function renderSaveSetup(root) {
     root.replaceChildren(h('div', { class: 'pane-scroll' }, bar,
       h('div', { class: 'settings' },
         h('p', { class: 'set-note' },
-          'This puts ', b('Save to Recipes'), ' in Safari\'s share sheet. Tap it on a recipe page and the recipe is written into your library, then shows up here under To review. You make the Shortcut once, by hand, on this iPhone. It takes about ten minutes.'),
+          'This puts ', b('Save Webpage to Recipes'), ' in Safari\'s share sheet. Tap it on a recipe page and the recipe is written into your library, then shows up here under To review. You make the Shortcut once, by hand, on this iPhone. It takes about ten minutes.'),
         scriptIsOld()
           ? h('p', { class: 'howto-note', role: 'note', text: 'A page was saved by a Shortcut with an older script. It still works, but it misses what the new script reads, such as the groups a page puts its ingredients in. Update the script, further down, takes a minute.' })
           : null,
@@ -87,7 +87,7 @@ export function renderSaveSetup(root) {
             p('Open the ', b('Settings'), ' app, then ', b('Apps'), ', then ', b('Shortcuts'), ', then ', b('Advanced'), ', and turn on ', b('Allow Running Scripts'), '. On some versions Shortcuts is in the main Settings list instead of under Apps.')),
 
           step('Start the Shortcut',
-            p('Open the ', b('Shortcuts'), ' app and tap ', b('+'), '. Tap the name at the top, choose ', b('Rename'), ', and call it ', b('Save to Recipes'), '.')),
+            p('Open the ', b('Shortcuts'), ' app and tap ', b('+'), '. Tap the name at the top, choose ', b('Rename'), ', and call it ', b('Save Webpage to Recipes'), '.')),
 
           step('Put it in Safari\'s share sheet',
             p('This is a setting of the Shortcut, not an action, so it is not in the action search. Close the search if it is open. At the bottom of the Shortcut\'s screen there is a small ', b('i'), ' in a circle. Tap it to open ', b('Details'), ', turn on ', b('Show in Share Sheet'), ', then tap ', b('Done'), ' or the tick.'),
@@ -130,7 +130,7 @@ export function renderSaveSetup(root) {
             p('Add the action ', b('Show Content'), ', which older versions call ', b('Show Result'), ', and make sure it shows ', b('Contents of URL'), '. Then tap ', b('Done'), '.')),
 
           step('Try it',
-            p('Open a recipe in Safari, tap ', b('Share'), ', and choose ', b('Save to Recipes'), '. It may be far down the list.'),
+            p('Open a recipe in Safari, tap ', b('Share'), ', and choose ', b('Save Webpage to Recipes'), '. It may be far down the list.'),
             p('The first time, the phone asks whether the Shortcut may read the page and whether it may connect to api.github.com. Allow both.'),
             p('A result then appears. If it mentions content and commit, the page was saved. Come back to Recipes, pull the list down to sync, and look for ', b('To review'), ' at the top.'))),
 
@@ -148,7 +148,7 @@ export function renderSaveSetup(root) {
           note('When the app learns to read more from a page, the script changes, and the Shortcut keeps the old one until you replace it. The app says so after a sync that brings in a page saved by an older script.'),
           h('ol', { class: 'howto-ask howto-count' },
             h('li', { text: 'Copy the new script with the button below.' }),
-            h('li', { text: 'Open the Shortcuts app and open Save to Recipes for editing: the three dots on it.' }),
+            h('li', { text: 'Open the Shortcuts app and open Save Webpage to Recipes for editing: the three dots on it.' }),
             h('li', { text: 'In Run JavaScript on Web Page, tap inside the script, choose Select All, and delete it.' }),
             h('li', { text: 'Paste, then tap Done. Nothing else in the Shortcut changes.' })),
           copyScript()))));

@@ -80,8 +80,8 @@ async function unpack(dir, path, id, now) {
   const by = typeof said.by === 'string' && said.by.trim() ? said.by.trim().slice(0, 60) : 'a Shortcut';
   if (!pictures.length) {
     const reason = tooLarge ? 'What was shared is too large to be read. Share fewer pictures at a time.'
-      : skipped ? 'The pictures that were shared could not be used. In the Send to Recipes Shortcut, check that Convert Image says JPEG.'
-        : 'No picture was found in what was shared. In the Send to Recipes Shortcut, check that Convert Image says JPEG.';
+      : skipped ? 'The pictures that were shared could not be used. In the Send Notes/Photos to Recipes Shortcut, check that Convert Image says JPEG.'
+        : 'No picture was found in what was shared. In the Send Notes/Photos to Recipes Shortcut, check that Convert Image says JPEG.';
     const failed = failedJob(makeJob({ id, count: 0, at: now, by, title: said.title, shared: true }), reason, now);
     await writeFile(file, serializeJob(failed));
     return failed;
